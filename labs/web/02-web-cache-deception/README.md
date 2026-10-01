@@ -37,7 +37,7 @@ mengembalikan halaman akun lengkap, ter-cache ~5 jam).
 ## Akun uji & model ancaman
 
 - Login: `POST /login` dengan form `user=victim` & `pass=victim-pass` →
-  respons `200` + cookie sesi.
+  respons `200` + cookie sesi. Form login juga tersedia di `GET /login`.
 - Kamu mensimulasikan dua peran: sebagai **korban** (kamu memegang sesi korban —
   di dunia nyata penyerang memancing korban membuka URL racun) dan sebagai
   **penyerang** yang membuktikan URL racun bisa diakses tanpa login.
@@ -124,6 +124,7 @@ selalu kembali rentan. Fix-mu hanya aktif lewat `./lab.sh fix-up` atau `./lab.sh
 - `GET /` → `200`, halaman publik.
 - `GET /account` tanpa login → `401`; dengan login → `200` halaman akun.
 - `POST /login` → `200` + cookie sesi (kredensial di atas).
+- `GET /login` → `200` form login.
 - `GET /static/app.css` → `200` file statis.
 - Header `X-Cache: MISS/HIT/BYPASS` menandai perilaku cache (alat observasi).
 
