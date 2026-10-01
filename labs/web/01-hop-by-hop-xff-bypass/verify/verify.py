@@ -59,9 +59,17 @@ def run_compose(args):
 
 
 def raw_request(path, headers=None):
-    """Kirim raw HTTP/1.1 agar header terkirim persis seperti ditulis."""
+    """Kirim raw HTTP/1.1 agar header terkirim persis seperti ditulis.
+
+    Membaca respons sampai EOF, jadi default-nya mengirim `Connection: close`
+    (kecuali caller menentukan sendiri, mis. serangan fase 1). Tanpa ini,
+    nginx (HTTP/1.1 keep-alive) tidak menutup koneksi dan recv() nyangkut
+    sampai socket timeout — wait_up terlihat "stuck" padahal lab hidup.
+    """
     lines = ["GET %s HTTP/1.1" % path, "Host: %s:%d" % (HOST, PORT)]
-    for k, v in (headers or {}).items():
+    hdrs = dict(headers or {})
+    hdrs.setdefault("Connection", "close")
+    for k, v in hdrs.items():
         lines.append("%s: %s" % (k, v))
     req = ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1")
     with socket.create_connection((HOST, PORT), timeout=10) as s:
