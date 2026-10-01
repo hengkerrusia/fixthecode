@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
 """
-mid/proxy.py — Hop 2 dari rantai lab.
+mid/proxy.py — Proxy penerus antara frontend dan backend.
 
-Meniru perilaku CloudFoundry gorouter dari write-up Nathan Davison:
-1. Mengonsumsi daftar hop-by-hop dari header `Connection`: setiap header yang
-   disebut di daftar itu DIHAPUS dari request (tidak diteruskan ke backend).
-2. Header `Connection` sendiri selalu dihapus (hop-by-hop, tidak diteruskan).
-3. Penanganan X-Forwarded-For ala gorouter:
-     - jika XFF tidak ada -> set XFF = IP peer (hop sebelumnya)
-     - jika XFF ada       -> append IP peer ke XFF
-4. Meneruskan request ke backend app dan mengembalikan responsenya.
+Menerima request HTTP dari frontend, meneruskannya ke upstream (app),
+lalu mengembalikan responsenya ke klien. Sebelum diteruskan, proxy
+menangani header Connection dan X-Forwarded-For.
 
-VULNERABLE BY DESIGN: proxy ini mempercayai daftar hop-by-hop kiriman klien
-*sepanjang hop di depannya (frontend) meneruskannya*. Fix yang benar ada di
-frontend: jangan teruskan daftar hop-by-hop kiriman klien.
-
-Catatan: proxy ini hanya melayani satu request per koneksi (Connection: close
-ke dua arah), jadi tidak ada risiko request smuggling/desync antar request.
+Proxy ini melayani satu request per koneksi (Connection: close ke dua arah).
 """
 import os
 import socket
@@ -57,7 +47,7 @@ def handle(client):
                 headers.append([name.decode("latin-1").strip(),
                                 value.decode("latin-1").strip()])
 
-        # 1. Kumpulkan daftar hop-by-hop dari header Connection.
+        # Kumpulkan token dari header Connection.
         hop_by_hop = set()
         for name, value in headers:
             if name.lower() == "connection":
@@ -66,7 +56,7 @@ def handle(client):
                     if token:
                         hop_by_hop.add(token)
 
-        # 2. Hapus header yang terdaftar + header Connection sendiri.
+        # Hapus header yang terdaftar + header Connection sendiri.
         forwarded = []
         for name, value in headers:
             lname = name.lower()
@@ -76,7 +66,7 @@ def handle(client):
                 continue
             forwarded.append((name, value))
 
-        # 3. X-Forwarded-For ala gorouter: set jika tidak ada, append jika ada.
+        # X-Forwarded-For: set jika tidak ada, append IP peer jika ada.
         xff_idx = next(
             (i for i, (n, _) in enumerate(forwarded)
              if n.lower() == "x-forwarded-for"),
@@ -104,7 +94,7 @@ def handle(client):
             body += chunk
         body = body[:content_length]
 
-        # 4. Teruskan ke upstream; baca respons sampai EOF (Connection: close).
+        # Teruskan ke upstream; baca respons sampai EOF (Connection: close).
         out_lines = [request_line]
         for name, value in forwarded:
             out_lines.append("%s: %s" % (name, value))

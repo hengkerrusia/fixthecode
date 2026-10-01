@@ -45,19 +45,43 @@ Backend yang membuat keputusan akses berdasarkan XFF pun tertipu.
 
 **Objektif:** dapatkan `HTTP 200` dari `GET /admin` (baseline normal: `403`).
 
-Panduan metodologi ada di `exploit/README.md`. Intinya, seperti di write-up:
+### Metodologi
 
-1. Kirim request baseline, catat respons.
-2. Pakai `/debug/headers` untuk melihat header apa yang *benar-benar* diterima backend.
-3. Uji: daftarkan sebuah header sebagai hop-by-hop via `Connection`, lihat apakah header
-   itu hilang di sisi backend.
-4. Temukan header yang dipercaya backend untuk keputusan akses, lalu buat rantai
-   proxy menulis ulang header itu dengan nilai yang menguntungkanmu.
+Black-box dulu, seperti di write-up:
 
-Keberhasilan fase 1 = `exploit/exploit.py` milikmu, saat dijalankan verifier,
-mencapai `200` di `/admin` dan mencetak `STATUS: 200`. Menyerang manual via curl
-boleh untuk eksplorasi, tapi kelulusan butuh script yang reproducible —
-kontrak lengkapnya di `exploit/README.md`.
+1. **Baseline.** Kirim request normal dan catat responsnya:
+   ```bash
+   curl -i http://localhost:8080/admin
+   curl -i http://localhost:8080/
+   ```
+2. **Observasi.** `GET /debug/headers` menampilkan header apa yang *benar-benar*
+   diterima backend setelah melewati seluruh rantai proxy. Bandingkan dengan yang
+   kamu kirim — selisihnya adalah perilaku rantainya:
+   ```bash
+   curl -s http://localhost:8080/debug/headers | python3 -m json.tool
+   ```
+3. **Uji hop-by-hop.** HTTP punya konsep header hop-by-hop (RFC 9110 §7.6.1):
+   header yang didaftarkan di `Connection` hanya berlaku untuk satu hop dan
+   seharusnya dikonsumsi (tidak diteruskan). Uji apakah rantai ini mematuhinya:
+   kirim request dengan `Connection: <nama-header-uji>`, lalu lihat di
+   `/debug/headers` apakah header itu hilang di sisi backend.
+4. **Eksploitasi.** Temukan header yang dipercaya backend untuk keputusan akses,
+   lalu susun request yang membuat rantai proxy menulis ulang header itu dengan
+   nilai yang menguntungkanmu. Ulangi sampai `GET /admin` mengembalikan `200`.
+
+### Deliverable
+
+Tulis seranganmu sebagai script di `exploit/exploit.py` (scaffold sudah
+disiapkan). Menyerang manual via curl boleh untuk eksplorasi, tapi kelulusan
+butuh script yang reproducible. Kontrak dengan verifier (`./lab.sh verify`):
+
+- Dijalankan sebagai `python3 exploit/exploit.py` saat lab hidup di `127.0.0.1:8080`.
+- Hanya Python stdlib, selesai < 60 detik.
+- Wajib mencetak baris `STATUS: <kode>` berisi status HTTP `GET /admin` hasil
+  seranganmu sendiri. Contoh sukses: `STATUS: 200`.
+- Fase 1 lulus jika verifier menemukan `STATUS: 200` di output skrip.
+- Kalau skripmu membaca respons sampai EOF, pastikan request-mu mengandung
+  `Connection: close` — kalau tidak, koneksi tidak ditutup dan skripmu hang.
 
 ## Fase 2 — Fixing
 
@@ -68,6 +92,10 @@ kontrak lengkapnya di `exploit/README.md`.
    `Connection`, dan siapa yang malah "meneruskannya" — baca lagi RFC 9110 §7.6.1.)
 2. Tulis perbaikanmu di `fix/frontend/nginx.conf` (scaffold sudah disiapkan —
    **jangan** edit file di `frontend/`, itu definisi rentan yang harus tetap pristine).
+   Uji dengan `./lab.sh fix-up` (lab berjalan dengan overlay fix-mu), lalu verifikasi
+   resmi dengan `./lab.sh verify`: verifier me-rebuild frontend dari `fix/`,
+   menjalankan ulang serangan fase 1-mu, dan memastikan serangan itu sekarang gagal
+   sementara fungsi normal tetap berjalan.
 3. Kriteria fix yang benar:
    - Serangan fase 1 sekarang menghasilkan `403`.
    - Request normal tetap `403` untuk `/admin` (tetap ditolak untuk pihak luar).
