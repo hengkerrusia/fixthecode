@@ -20,7 +20,25 @@ INDEX_PAGE = """<!DOCTYPE html>
 <html><head><title>Welcome</title></head><body>
 <h1>Welcome</h1>
 <p>This is the public landing page.</p>
-<p><a href="/static/app.css">stylesheet</a></p>
+<p><a href="/login">Login</a></p>
+</body></html>
+"""
+
+LOGIN_PAGE = """<!DOCTYPE html>
+<html><head><title>Login</title></head><body>
+<h1>Login</h1>
+<form method="post" action="/login">
+<p><label>Username<br><input type="text" name="user"></label></p>
+<p><label>Password<br><input type="password" name="pass"></label></p>
+<p><button type="submit">Login</button></p>
+</form>
+</body></html>
+"""
+
+LOGIN_OK_PAGE = """<!DOCTYPE html>
+<html><head><title>Login</title></head><body>
+<h1>Login successful</h1>
+<p><a href="/account">Go to your account</a></p>
 </body></html>
 """
 
@@ -65,6 +83,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             self._send(200, INDEX_PAGE)
+        elif path == "/login":
+            self._send(200, LOGIN_PAGE)
         elif path == "/static/app.css":
             self._send(200, STATIC_CSS, "text/css",
                        [("Cache-Control", "public, max-age=3600")])
@@ -83,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
         user = fields.get("user", [""])[0]
         password = fields.get("pass", [""])[0]
         if user == LOGIN_USER and password == LOGIN_PASS:
-            self._send(200, "ok", extra_headers=[
+            self._send(200, LOGIN_OK_PAGE, extra_headers=[
                 ("Set-Cookie",
                  "session=%s; Path=/; HttpOnly" % SESSION_TOKEN)])
         else:
