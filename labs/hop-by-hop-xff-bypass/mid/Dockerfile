@@ -1,0 +1,6 @@
+FROM python:3.12-alpine
+WORKDIR /srv
+COPY proxy.py .
+ENV LISTEN_PORT=8080 UPSTREAM_HOST=app UPSTREAM_PORT=8000
+EXPOSE 8080
+CMD ["python", "proxy.py"]

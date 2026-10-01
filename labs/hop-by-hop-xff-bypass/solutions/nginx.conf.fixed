@@ -1,0 +1,30 @@
+# solutions/nginx.conf.fixed — REFERENCE FIX (fase 2). Buka hanya kalau mentok.
+#
+# Perbaikan: frontend MENGONSUMSI header Connection kiriman klien — daftar
+# hop-by-hop tidak lagi diteruskan ke hop berikutnya (RFC 9110 §7.6.1).
+# Satu-satunya perubahan dari versi rentan: baris `proxy_set_header Connection`
+# sekarang statis "close", dan blok `map` yang meneruskan $http_connection
+# dihapus karena tidak lagi dipakai.
+
+events {}
+
+http {
+    access_log off;
+
+    upstream mid {
+        server mid:8080;
+    }
+
+    server {
+        listen 80;
+
+        location / {
+            proxy_pass http://mid;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            # FIX: konsumsi daftar hop-by-hop kiriman klien; jangan teruskan.
+            proxy_set_header Connection close;
+        }
+    }
+}
