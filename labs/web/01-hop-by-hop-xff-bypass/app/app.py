@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
 """
-app/app.py — Backend aplikasi lab (VULNERABLE BY DESIGN).
-
-Keputusan akses /admin dibuat HANYA berdasarkan header X-Forwarded-For:
-request dianggap internal jika XFF ada dan SELURUH IP dalam rantai XFF berada
-di TRUSTED_CIDR. Ini meniru pola nyata yang dieksploitasi lewat hop-by-hop
-header abuse (Nathan Davison, "Abusing HTTP hop-by-hop request headers"):
-ketika XFF di-strip di tengah rantai lalu ditulis ulang oleh hop berikutnya
-dengan IP internal-nya sendiri, backend mengira request datang dari dalam.
+app/app.py — Backend aplikasi lab.
 
 Endpoint:
   GET /               -> halaman publik (200)
-  GET /admin          -> 200 jika rantai XFF seluruhnya internal, 403 jika tidak
-  GET /debug/headers  -> 200 JSON berisi header yang diterima backend
-                         (alat observasi untuk fase 1)
+  GET /admin          -> panel admin (200 jika diizinkan, 403 jika tidak)
+  GET /debug/headers  -> 200, JSON berisi header yang diterima backend
 """
 import ipaddress
 import json
@@ -61,9 +53,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "OK - public page\n")
         elif path == "/admin":
             if xff_is_fully_internal(self.headers.get("X-Forwarded-For")):
-                self._send(200, "Welcome to the admin panel (internal access granted)\n")
+                self._send(200, "Welcome to the admin panel\n")
             else:
-                self._send(403, "Forbidden: admin access requires internal network\n")
+                self._send(403, "Forbidden\n")
         elif path == "/debug/headers":
             echo = {k: v for k, v in self.headers.items()}
             echo["__peer"] = self.client_address[0]
