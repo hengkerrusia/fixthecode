@@ -23,7 +23,7 @@ Lab dinyatakan **sukses** hanya jika kedua fase lolos verifikasi otomatis (`veri
 ## Anatomi sebuah lab
 
 ```
-labs/<nama-lab>/
+labs/<kategori>/<nn>-<nama-lab>/
   README.md               # skenario, arsitektur, objektif 2 fase, referensi
   docker-compose.yml      # definisi PRISTINE (rentan) — jangan diedit untuk fixing
   docker-compose.fix.yml  # overlay compose: pakai config dari fix/
@@ -35,16 +35,19 @@ labs/<nama-lab>/
   solutions/              # solusi referensi — buka hanya kalau mentok
 ```
 
+Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `mobile`,
+`cloud`); satu lab masuk satu kategori utama (kategori sekunder dicatat di README lab).
+
 ## Daftar lab
 
 | # | Lab | Kelas kerentanan | Sumber |
 |---|-----|------------------|--------|
-| 1 | `hop-by-hop-xff-bypass` | Hop-by-hop header abuse → X-Forwarded-For stripping → admin bypass | Nathan Davison, "Abusing HTTP hop-by-hop request headers" |
+| 1 | [`web/01-hop-by-hop-xff-bypass`](labs/web/01-hop-by-hop-xff-bypass/) | Hop-by-hop header abuse → X-Forwarded-For stripping → admin bypass | Nathan Davison, "Abusing HTTP hop-by-hop request headers" |
 
 ## Mulai cepat
 
 ```bash
-cd labs/hop-by-hop-xff-bypass
+cd labs/web/01-hop-by-hop-xff-bypass
 ./lab.sh start    # jalankan lab (kondisi rentan) di http://localhost:8080
 ./lab.sh verify   # verifikasi fase 1 + fase 2
 ./lab.sh stop     # hentikan & bersihkan container
