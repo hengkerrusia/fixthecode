@@ -69,8 +69,8 @@ Keberhasilan fase 1 = exploit-mu reproducible (script), bukan kebetulan.
    - Serangan fase 1 sekarang menghasilkan `403`.
    - Request normal tetap `403` untuk `/admin` (tetap ditolak untuk pihak luar).
    - `/` dan `/debug/headers` tetap `200`, dan rantai `X-Forwarded-For` normal
-     (2 IP: IP klien + IP frontend) tetap utuh — artinya kamu tidak merusak
-     perilaku proxy yang legitimate.
+     (2 IP: `203.0.113.7` = IP klien eksternal + IP frontend) tetap utuh —
+     artinya kamu tidak merusak perilaku proxy yang legitimate.
 4. Bonus (defense in depth, tidak dinilai): apa yang masih rapuh dari keputusan akses
    di `app/app.py`? Bagaimana kamu mengeraskannya?
 

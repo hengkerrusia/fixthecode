@@ -162,8 +162,12 @@ def main():
             data = json.loads(body.decode("utf-8"))
             xff = data.get("X-Forwarded-For", "")
             parts = [p.strip() for p in xff.split(",") if p.strip()]
-            # Rantai normal: [IP klien/frontnet, IP frontend/backnet]
+            # Rantai normal: [IP klien eksternal, IP frontend/backnet].
+            # IP pertama WAJIB di luar BACKNET — ini invariant yang menjaga
+            # baseline selalu 403 (regresi: gateway NAT Docker pernah bocor
+            # masuk rantai sebagai $remote_addr di sebagian mesin).
             chain_ok = (len(parts) == 2
+                        and ipaddress.ip_address(parts[0]) not in BACKNET
                         and ipaddress.ip_address(parts[1]) in BACKNET)
             chain_detail = "XFF=%s" % xff
         except Exception as e:
