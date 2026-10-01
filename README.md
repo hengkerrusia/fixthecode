@@ -31,7 +31,7 @@ labs/<kategori>/<nn>-<nama-lab>/
   frontend/  mid/  app/   # service lab (Dockerfile + config, tanpa volume mount)
   fix/                    # <-- hasil kerja fase 2 tinggal di sini
   verify/verify.py        # verifier otomatis 2 fase (Python stdlib only)
-  exploit/README.md       # panduan fase 1 (tanpa solusi)
+  exploit/                # panduan fase 1 + exploit.py milikmu (dieksekusi & dinilai verifier)
   solutions/              # solusi referensi — buka hanya kalau mentok
 ```
 

@@ -7,20 +7,24 @@ Hanya memakai Python stdlib (tanpa dependency), butuh `docker compose` di host.
 Alur:
   FASE 1 (pristine): bangun lab dari definisi rentan, pastikan
       - baseline GET /admin            -> 403
-      - serangan hop-by-hop            -> 200  (lab terbukti rentan)
+      - serangan referensi (health)    -> 200  (lab terbukti rentan;
+        kalau ini gagal, yang rusak lab-nya, bukan learner)
+      - exploit/exploit.py milik learner dijalankan -> mencetak STATUS: 200
       - GET /                          -> 200
   FASE 2 (dengan fix/): bangun ulang frontend dari fix/frontend, pastikan
       - serangan hop-by-hop            -> 403  (wajib; serangan harus gagal)
       - baseline GET /admin            -> 403
       - GET /                          -> 200
       - GET /debug/headers             -> 200 dan rantai XFF normal utuh
-        (2 IP: IP klien + IP frontend; bukti proxy tidak rusak)
+        (2 IP: IP klien eksternal + IP frontend; bukti proxy tidak rusak)
 
-Exit code: 0 = kedua fase lulus, 1 = gagal, 2 = fase 2 belum dikerjakan.
+Exit code: 0 = kedua fase lulus, 1 = gagal, 2 = fase 2 belum dikerjakan,
+           3 = fase 1 belum dikerjakan (exploit.py belum ada/belum diisi).
 """
 import ipaddress
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -115,13 +119,57 @@ def main():
     check("baseline /admin ditolak (403)", s_base == 403, "dapat %d" % s_base)
     s_hit, _ = raw_request("/")
     check("halaman publik / hidup (200)", s_hit == 200, "dapat %d" % s_hit)
-    s_x = attack_status()
-    check("serangan hop-by-hop menembus /admin (200)", s_x == 200, "dapat %d" % s_x)
 
-    if s_x != 200:
+    # Health check: lab harus rentan terhadap serangan referensi.
+    # Kalau ini gagal, yang rusak adalah lab/setup-nya — bukan learner.
+    s_ref = attack_status()
+    check("lab dalam kondisi rentan (serangan referensi -> 200)",
+          s_ref == 200, "dapat %d" % s_ref)
+    if s_ref != 200:
         log("\nFase 1 GAGAL: lab tidak dalam kondisi rentan. Periksa setup Docker.")
         sys.exit(1)
-    log("FASE 1: LULUS — lab terbukti rentan dan exploit bekerja.\n")
+
+    # Artefak learner: exploit/exploit.py harus ada dan sudah diisi.
+    exploit_py = os.path.join(LAB_DIR, "exploit", "exploit.py")
+    if not os.path.exists(exploit_py):
+        log("FASE 1: exploit/exploit.py belum ada — kerjakan fase 1 dulu "
+            "(tulis exploit-mu di sana; lihat exploit/README.md).")
+        sys.exit(3)
+    with open(exploit_py, encoding="utf-8") as f:
+        exploit_txt = f.read()
+    if "TODO (fase 1)" in exploit_txt:
+        log("FASE 1: exploit/exploit.py masih scaffold (belum diedit) — "
+            "kerjakan fase 1 dulu.")
+        sys.exit(3)
+
+    # Jalankan exploit milik learner. Kontrak: skrip mencetak baris
+    # "STATUS: <kode>" berisi status HTTP GET /admin hasil serangannya.
+    log("menjalankan exploit/exploit.py milik learner ...")
+    try:
+        p = subprocess.run([sys.executable, exploit_py],
+                           capture_output=True, text=True, timeout=60,
+                           cwd=LAB_DIR)
+    except subprocess.TimeoutExpired:
+        log("FASE 1 GAGAL: exploit/exploit.py melebihi 60 detik (hang?).")
+        sys.exit(1)
+    out = (p.stdout or "") + "\n" + (p.stderr or "")
+    m = re.search(r"^STATUS:\s*(\d{3})\s*$", out, re.MULTILINE)
+    got = m.group(1) if m else None
+    ok1 = check("exploit learner menembus /admin (STATUS: 200)", got == "200",
+                "dapat %s" % ("STATUS: " + got if got
+                              else "tidak ada baris STATUS: <kode> di output"))
+    if p.returncode != 0:
+        log("  (catatan: script exit code %d)" % p.returncode)
+    if not ok1:
+        tail = out.strip().splitlines()[-8:]
+        if tail:
+            log("  output script (maks 8 baris terakhir):")
+            for line in tail:
+                log("    " + line)
+        log("\nFase 1 GAGAL: exploit-mu belum mencapai 200 di /admin. "
+            "Lihat exploit/README.md.")
+        sys.exit(1)
+    log("FASE 1: LULUS — exploit learner reproducible dan berhasil.\n")
 
     # ---- FASE 2: fix harus ada dan benar ----
     pristine = os.path.join(LAB_DIR, "frontend", "nginx.conf")

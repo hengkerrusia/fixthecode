@@ -54,7 +54,10 @@ Panduan metodologi ada di `exploit/README.md`. Intinya, seperti di write-up:
 4. Temukan header yang dipercaya backend untuk keputusan akses, lalu buat rantai
    proxy menulis ulang header itu dengan nilai yang menguntungkanmu.
 
-Keberhasilan fase 1 = exploit-mu reproducible (script), bukan kebetulan.
+Keberhasilan fase 1 = `exploit/exploit.py` milikmu, saat dijalankan verifier,
+mencapai `200` di `/admin` dan mencetak `STATUS: 200`. Menyerang manual via curl
+boleh untuk eksplorasi, tapi kelulusan butuh script yang reproducible —
+kontrak lengkapnya di `exploit/README.md`.
 
 ## Fase 2 — Fixing
 
