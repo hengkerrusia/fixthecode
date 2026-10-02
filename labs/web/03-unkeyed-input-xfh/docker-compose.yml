@@ -1,0 +1,19 @@
+# Definisi PRISTINE (rentan) — jangan diedit untuk fixing.
+# Fixing dikerjakan di fix/ dan diuji via docker-compose.fix.yml.
+services:
+  cache:
+    build: ./cache
+    ports:
+      - "8080:80"
+    depends_on:
+      - app
+    networks:
+      labnet: {}
+
+  app:
+    build: ./app
+    networks:
+      labnet: {}
+
+networks:
+  labnet: {}
