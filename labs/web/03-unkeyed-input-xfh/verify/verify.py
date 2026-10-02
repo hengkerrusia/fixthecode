@@ -91,7 +91,13 @@ def raw_request(method, path, headers=None, body=None):
             resp += chunk
     head, _, resp_body = resp.partition(b"\r\n\r\n")
     head_lines = head.split(b"\r\n")
-    status = int(head_lines[0].split()[1])
+    try:
+        status = int(head_lines[0].split()[1])
+    except (IndexError, ValueError):
+        # Server menutup koneksi tanpa mengirim respons (mis. handler crash
+        # atau origin mati saat cache fetch). Laporkan sebagai status 0 agar
+        # cek-cek gagal dengan pesan yang jelas, bukan traceback.
+        return 0, {}, b""
     hdict = {}
     for line in head_lines[1:]:
         if b":" in line:
@@ -246,8 +252,12 @@ def main():
         sys.exit(2)
 
     log("== FASE 2: membangun lab dengan FIX ==")
+    # --force-recreate: cache dibuat ulang dalam keadaan kosong. Tanpa ini,
+    # container cache dari fase 1 dipakai lagi (racun fase 1 masih di memori)
+    # dan wait_up bisa "lulus" dari cache basi padahal app (fix) belum siap
+    # atau rusak — request segar berikutnya lalu gagal tanpa respons.
     run_compose(["-f", "docker-compose.yml", "-f", "docker-compose.fix.yml",
-                 "up", "--build", "-d"])
+                 "up", "--build", "--force-recreate", "-d"])
     if not wait_up():
         log("lab (fix) tidak merespons — cek `docker compose logs`.")
         sys.exit(1)
