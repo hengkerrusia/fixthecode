@@ -45,6 +45,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 1 | [`web/01-hop-by-hop-xff-bypass`](labs/web/01-hop-by-hop-xff-bypass/) | Hop-by-hop header abuse → X-Forwarded-For stripping → admin bypass | Nathan Davison, "Abusing HTTP hop-by-hop request headers" |
 | 2 | [`web/02-web-cache-deception`](labs/web/02-web-cache-deception/) | Web cache deception → halaman privat ter-cache publik | Omer Gil, "Web Cache Deception Attack" (PayPal, $3.000) |
 | 3 | [`web/03-unkeyed-input-xfh`](labs/web/03-unkeyed-input-xfh/) | Unkeyed input → X-Forwarded-Host cache poisoning | HackerOne #977851 (Shopify, $1.300 → $6.300) |
+| 4 | [`web/04-method-override`](labs/web/04-method-override/) | Method override → X-HTTP-Method-Override cache poisoning DoS | HackerOne #1160407 (GitLab, $2.500) |
 
 ## Mulai cepat
 
