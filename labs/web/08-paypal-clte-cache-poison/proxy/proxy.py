@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Front-end caching reverse proxy untuk Lab 8 (stdlib-only).
+
+Meneruskan request HTTP/1.1 ke backend lewat satu koneksi keep-alive
+bersama, dan meng-cache respons GET 200 dengan kunci (method, target).
+Request dengan "Cache-Control: no-cache" diteruskan ke origin
+(mengabaikan isi cache) dan respons segarnya disimpan.
+"""
+import os
+import socket
+import threading
+
+LISTEN_HOST = "0.0.0.0"
+LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "80"))
+BACKEND_HOST = os.environ.get("BACKEND_HOST", "backend")
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8000"))
+
+REASONS = {200: "OK", 400: "Bad Request", 502: "Bad Gateway"}
+
+_cache = {}
+_cache_lock = threading.Lock()
+
+_be_lock = threading.Lock()
+_be_sock = None
+_be_rf = None
+
+
+def _read_line(rf):
+    line = rf.readline(65536)
+    if not line:
+        return None
+    return line.decode("latin-1").rstrip("\r\n")
+
+
+def _read_headers(rf):
+    items = []
+    lookup = {}
+    while True:
+        line = _read_line(rf)
+        if line is None:
+            return None
+        if line == "":
+            break
+        if ":" not in line:
+            raise ValueError("header buruk")
+        name, value = line.split(":", 1)
+        name = name.strip()
+        value = value.strip()
+        items.append((name, value))
+        lookup.setdefault(name.lower(), value)
+    return items, lookup
+
+
+def _read_exact(rf, n):
+    data = b""
+    while len(data) < n:
+        chunk = rf.read(n - len(data))
+        if not chunk:
+            raise ValueError("EOF saat membaca body")
+        data += chunk
+    return data
+
+
+def _te_tokens(value):
+    return [t.strip().lower() for t in value.split(",") if t.strip()]
+
+
+def _read_chunked(rf):
+    body = b""
+    while True:
+        line = _read_line(rf)
+        if line is None:
+            raise ValueError("EOF saat membaca ukuran chunk")
+        try:
+            size = int(line.split(";", 1)[0].strip(), 16)
+        except ValueError:
+            raise ValueError("ukuran chunk buruk")
+        if size < 0:
+            raise ValueError("ukuran chunk negatif")
+        if size == 0:
+            while True:
+                trail = _read_line(rf)
+                if trail is None:
+                    raise ValueError("EOF di trailer chunk")
+                if trail == "":
+                    return body
+        body += _read_exact(rf, size)
+        if rf.read(2) != b"\r\n":
+            raise ValueError("chunk tidak diakhiri CRLF")
+
+
+def _read_request(rf):
+    line = _read_line(rf)
+    if line is None:
+        return None
+    parts = line.split()
+    if len(parts) != 3:
+        raise ValueError("request line buruk")
+    method, target, _version = parts
+    headers = _read_headers(rf)
+    if headers is None:
+        return None
+    items, lookup = headers
+    cl = lookup.get("content-length")
+    te = lookup.get("transfer-encoding", "")
+    # Kebijakan framing: Content-Length diutamakan bila ada.
+    if cl is not None:
+        try:
+            n = int(cl)
+        except ValueError:
+            raise ValueError("content-length buruk")
+        if n < 0:
+            raise ValueError("content-length negatif")
+        body = _read_exact(rf, n) if n else b""
+    elif "chunked" in _te_tokens(te):
+        body = _read_chunked(rf)
+    else:
+        body = b""
+    return method, target, items, lookup, body
+
+
+def _be_connect():
+    global _be_sock, _be_rf
+    if _be_sock is not None:
+        return
+    s = socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=10)
+    _be_sock = s
+    _be_rf = s.makefile("rb")
+
+
+def _be_reset():
+    global _be_sock, _be_rf
+    try:
+        if _be_sock is not None:
+            _be_sock.close()
+    except OSError:
+        pass
+    _be_sock = None
+    _be_rf = None
+
+
+def _read_response(rf):
+    line = _read_line(rf)
+    if line is None:
+        raise ValueError("backend menutup koneksi")
+    parts = line.split(" ", 2)
+    if len(parts) < 2:
+        raise ValueError("status line buruk")
+    try:
+        status = int(parts[1])
+    except ValueError:
+        raise ValueError("status buruk")
+    reason = parts[2] if len(parts) > 2 else REASONS.get(status, "")
+    headers = _read_headers(rf)
+    if headers is None:
+        raise ValueError("header respons buruk")
+    items, lookup = headers
+    body = b""
+    if lookup.get("content-length") is not None:
+        try:
+            n = int(lookup["content-length"])
+        except ValueError:
+            raise ValueError("content-length respons buruk")
+        body = _read_exact(rf, n) if n > 0 else b""
+    return status, reason, items, body
+
+
+def _forward(method, target, items, lookup, body):
+    fwd_items = list(items)
+    fwd_body = body
+    if (lookup.get("content-length") is None
+            and "chunked" in _te_tokens(lookup.get("transfer-encoding", ""))):
+        fwd_items = [(n, v) for (n, v) in items
+                     if n.lower() != "transfer-encoding"]
+        fwd_items.append(("Content-Length", str(len(body))))
+    with _be_lock:
+        _be_connect()
+        out = ["%s %s HTTP/1.1\r\n" % (method, target)]
+        for name, value in fwd_items:
+            if name.lower() == "connection":
+                continue
+            out.append("%s: %s\r\n" % (name, value))
+        out.append("Connection: keep-alive\r\n\r\n")
+        data = "".join(out).encode("latin-1") + fwd_body
+        try:
+            _be_sock.sendall(data)
+            return _read_response(_be_rf)
+        except (OSError, ValueError):
+            _be_reset()
+            _be_connect()
+            _be_sock.sendall(data)
+            return _read_response(_be_rf)
+
+
+def _send(conn, status, reason, headers_items, body, cache_flag, keep_alive):
+    head = ["HTTP/1.1 %d %s\r\n" % (status, reason)]
+    for name, value in headers_items:
+        low = name.lower()
+        if low in ("connection", "x-cache", "content-length"):
+            continue
+        head.append("%s: %s\r\n" % (name, value))
+    head.append("X-Cache: %s\r\n" % cache_flag)
+    head.append("Content-Length: %d\r\n" % len(body))
+    head.append("Connection: %s\r\n\r\n"
+                % ("keep-alive" if keep_alive else "close"))
+    conn.sendall("".join(head).encode("latin-1") + body)
+
+
+def _send_simple(conn, status, keep_alive=True):
+    reason = REASONS.get(status, "")
+    body = ("%d %s\n" % (status, reason)).encode("latin-1")
+    _send(conn, status, reason, [("Content-Type", "text/plain")], body,
+          "MISS", keep_alive)
+
+
+def _handle_client(conn):
+    rf = conn.makefile("rb")
+    try:
+        while True:
+            try:
+                req = _read_request(rf)
+            except ValueError:
+                _send_simple(conn, 400, keep_alive=False)
+                break
+            if req is None:
+                break
+            method, target, items, lookup, body = req
+            client_close = lookup.get("connection", "").lower() == "close"
+            key = (method, target)
+            cc = lookup.get("cache-control", "")
+            no_cache = "no-cache" in [t.strip().lower()
+                                      for t in cc.split(",")]
+            served = False
+            # no-cache: lewati cache baca, teruskan ke origin, tapi
+            # respons segarnya tetap disimpan (menimpa entri lama).
+            if method == "GET" and not no_cache:
+                with _cache_lock:
+                    hit = _cache.get(key)
+                if hit is not None:
+                    st, reason, hitems, hbody = hit
+                    _send(conn, st, reason, hitems, hbody, "HIT", client_close)
+                    served = True
+            if not served:
+                try:
+                    st, reason, hitems, hbody = _forward(
+                        method, target, items, lookup, body)
+                except (OSError, ValueError):
+                    _send_simple(conn, 502, keep_alive=False)
+                    break
+                if method == "GET" and st == 200:
+                    with _cache_lock:
+                        _cache[key] = (st, reason, hitems, hbody)
+                _send(conn, st, reason, hitems, hbody, "MISS", client_close)
+            if client_close:
+                break
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+def main():
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind((LISTEN_HOST, LISTEN_PORT))
+    srv.listen(128)
+    while True:
+        conn, _addr = srv.accept()
+        t = threading.Thread(target=_handle_client, args=(conn,), daemon=True)
+        t.start()
+
+
+if __name__ == "__main__":
+    main()
