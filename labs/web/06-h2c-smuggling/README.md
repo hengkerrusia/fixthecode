@@ -78,19 +78,19 @@ Black-box dulu, seperti di riset aslinya:
    dan cukup untuk dipelajari:
    - Frame = 24-bit panjang, 8-bit type, 8-bit flags, 31-bit stream id,
      lalu payload.
-   - Blok header memakai *literal without indexing*: satu byte `0x00`,
-     lalu 1 byte panjang nama, nama, 1 byte panjang nilai, nilai
-     (nama < 16 byte, nilai < 128 byte — lebih dari cukup).
+   - Blok header memakai *literal without indexing*: satu byte
+     `0x0N` (panjang nama di 4 bit bawah), lalu nama, 1 byte panjang
+     nilai, nilai (nama < 16 byte, nilai < 128 byte — lebih dari cukup).
    - Pseudo-header yang dibutuhkan: `:method`, `:scheme`, `:path`,
      `:authority`.
    
    Contoh blok header untuk `GET /admin` (heks):
    ```
-   00 07 3a6d6574686f64 03 474554        ; :method = GET
-   00 07 3a736368656d65 04 68747470      ; :scheme = http
-   00 05 3a70617468 06 2f61646d696e      ; :path = /admin
-   00 0a 3a617574686f72697479 0e 3132372e302e302e313a38303830
-                                        ; :authority = 127.0.0.1:8080
+   07 3a6d6574686f64 03 474554              ; :method = GET
+   07 3a736368656d65 04 68747470            ; :scheme = http
+   05 3a70617468 06 2f61646d696e            ; :path = /admin
+   0a 3a617574686f72697479 0e 3132372e302e302e313a38303830
+                                            ; :authority = 127.0.0.1:8080
    ```
    Responsnya juga frame: HEADERS berisi `:status`, lalu DATA berisi bodi.
    Baca frame dengan panjang eksak — jangan baca sampai EOF.
