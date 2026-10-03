@@ -48,6 +48,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 4 | [`web/04-method-override`](labs/web/04-method-override/) | Method override → X-HTTP-Method-Override cache poisoning DoS | HackerOne #1160407 (GitLab, $2.500) |
 | 5 | [`web/05-cpdos-error-caching`](labs/web/05-cpdos-error-caching/) | CPDoS → error caching (403) → denial of service | "Your Cache Has Fallen" (CCS 2019); 403-caching $2.500 |
 | 6 | [`web/06-h2c-smuggling`](labs/web/06-h2c-smuggling/) | H2C smuggling → terowongan upgrade HTTP/2 cleartext → bypass proteksi /admin | Bishop Fox, h2csmuggler |
+| 7 | [`web/07-ats-chunked-smuggling`](labs/web/07-ats-chunked-smuggling/) | Chunked desync → parser chunked basi (stale CR flag) → request selundupan lolos ke origin | CVE-2025-65114 (ATS, CWE-444) |
 
 ## Mulai cepat
 
