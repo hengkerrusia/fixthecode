@@ -55,28 +55,49 @@ def hpack_int(data, pos, prefix):
     return value, pos
 
 
+HPACK_STATIC = {
+    1: ":authority", 2: ":method", 3: ":method", 4: ":path",
+    5: ":path", 6: ":scheme", 7: ":scheme",
+}
+HPACK_STATIC_VALUE = {
+    2: "GET", 3: "POST", 4: "/", 5: "/index.html",
+    6: "http", 7: "https",
+}
+
+
 def parse_header_block(payload):
     fields = {}
     pos, n = 0, len(payload)
     while pos < n:
         b0 = payload[pos]
         if b0 & 0x80:
-            break
-        if b0 & 0x40:
-            prefix = 6
+            idx, pos = hpack_int(payload, pos, 7)
+            name = HPACK_STATIC.get(idx)
+            if name is None:
+                break
+            fields[name] = HPACK_STATIC_VALUE.get(idx, "")
+        elif b0 & 0x40:
+            idx, pos = hpack_int(payload, pos, 6)
+            name = HPACK_STATIC.get(idx)
+            if name is None or pos >= n:
+                break
+            if payload[pos] & 0x80:
+                break
+            value_len, pos = hpack_int(payload, pos, 7)
+            fields[name] = payload[pos:pos + value_len].decode("latin-1")
+            pos += value_len
         elif (b0 & 0xF0) == 0x00:
-            prefix = 4
+            name_len, pos = hpack_int(payload, pos, 4)
+            name = payload[pos:pos + name_len].decode("latin-1")
+            pos += name_len
+            if pos >= n or payload[pos] & 0x80:
+                break
+            value_len, pos = hpack_int(payload, pos, 7)
+            value = payload[pos:pos + value_len].decode("latin-1")
+            pos += value_len
+            fields[name] = value
         else:
             break
-        name_len, pos = hpack_int(payload, pos, prefix)
-        name = payload[pos:pos + name_len].decode("latin-1")
-        pos += name_len
-        if payload[pos] & 0x80:
-            break
-        value_len, pos = hpack_int(payload, pos, 7)
-        value = payload[pos:pos + value_len].decode("latin-1")
-        pos += value_len
-        fields[name] = value
     return fields
 
 
@@ -86,22 +107,31 @@ def literal(name, value):
 
 
 def serve_h2(conn):
-    if recvn(conn, len(PREFACE)) != PREFACE:
-        return
-    send_frame(conn, 0x4, 0x00, 0, b"")
-    while True:
-        ftype, flags, stream_id, payload = read_frame(conn)
-        if ftype == 0x4 and not (flags & 0x1):
-            send_frame(conn, 0x4, 0x1, 0, b"")
-        elif ftype == 0x6 and len(payload) == 8:
-            send_frame(conn, 0x6, 0x1, 0, payload)
-        elif ftype == 0x1:
-            fields = parse_header_block(payload)
-            path = fields.get(":path", "/").split("?", 1)[0]
-            body = ADMIN_BODY if path.startswith(ADMIN_PREFIX) else INDEX_BODY
-            send_frame(conn, 0x1, 0x4, stream_id, literal(":status", "200"))
-            send_frame(conn, 0x0, 0x1, stream_id, body)
+    # Koneksi HTTP/2 bersifat persistent: tetap baca frame sampai klien
+    # menutup atau timeout. Langsung menutup setelah merespons bisa
+    # memicu RST yang menggugurkan frame DATA yang belum diteruskan.
+    conn.settimeout(30)
+    try:
+        if recvn(conn, len(PREFACE)) != PREFACE:
             return
+        send_frame(conn, 0x4, 0x00, 0, b"")
+        while True:
+            try:
+                ftype, flags, stream_id, payload = read_frame(conn)
+            except (ConnectionError, socket.timeout):
+                return
+            if ftype == 0x4 and not (flags & 0x1):
+                send_frame(conn, 0x4, 0x1, 0, b"")
+            elif ftype == 0x6 and len(payload) == 8:
+                send_frame(conn, 0x6, 0x1, 0, payload)
+            elif ftype == 0x1:
+                fields = parse_header_block(payload)
+                path = fields.get(":path", "/").split("?", 1)[0]
+                body = ADMIN_BODY if path.startswith(ADMIN_PREFIX) else INDEX_BODY
+                send_frame(conn, 0x1, 0x4, stream_id, literal(":status", "200"))
+                send_frame(conn, 0x0, 0x1, stream_id, body)
+    finally:
+        conn.settimeout(None)
 
 
 def recv_head(conn):

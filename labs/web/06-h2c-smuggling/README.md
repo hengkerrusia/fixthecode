@@ -94,6 +94,10 @@ Black-box dulu, seperti di riset aslinya:
    ```
    Responsnya juga frame: HEADERS berisi `:status`, lalu DATA berisi bodi.
    Baca frame dengan panjang eksak — jangan baca sampai EOF.
+
+   Bentuk literal di atas cukup untuk lab ini. Backend juga memahami bentuk
+   *indexed* dari static table HPACK (mis. `0x82` untuk `:method: GET`,
+   `0x86` untuk `:scheme: http`) — pakai yang mana pun yang kamu kuasai.
 5. **Eksploitasi.** Selundupkan request `/admin` lewat terowongan h2c dan
    buktikan kamu mendapat `200` + konten panel admin. Ulangi sampai konsisten.
 

@@ -167,28 +167,49 @@ def h2_int(data, pos, prefix):
     return value, pos
 
 
+HPACK_STATIC = {
+    1: ":authority", 2: ":method", 3: ":method", 4: ":path",
+    5: ":path", 6: ":scheme", 7: ":scheme",
+}
+HPACK_STATIC_VALUE = {
+    2: "GET", 3: "POST", 4: "/", 5: "/index.html",
+    6: "http", 7: "https",
+}
+
+
 def h2_parse_headers(payload):
     fields = {}
     pos, n = 0, len(payload)
     while pos < n:
         b0 = payload[pos]
         if b0 & 0x80:
-            break
-        if b0 & 0x40:
-            prefix = 6
+            idx, pos = h2_int(payload, pos, 7)
+            name = HPACK_STATIC.get(idx)
+            if name is None:
+                break
+            fields[name] = HPACK_STATIC_VALUE.get(idx, "")
+        elif b0 & 0x40:
+            idx, pos = h2_int(payload, pos, 6)
+            name = HPACK_STATIC.get(idx)
+            if name is None or pos >= n:
+                break
+            if payload[pos] & 0x80:
+                break
+            value_len, pos = h2_int(payload, pos, 7)
+            fields[name] = payload[pos:pos + value_len].decode("latin-1")
+            pos += value_len
         elif (b0 & 0xF0) == 0x00:
-            prefix = 4
+            name_len, pos = h2_int(payload, pos, 4)
+            name = payload[pos:pos + name_len].decode("latin-1")
+            pos += name_len
+            if pos >= n or payload[pos] & 0x80:
+                break
+            value_len, pos = h2_int(payload, pos, 7)
+            value = payload[pos:pos + value_len].decode("latin-1")
+            pos += value_len
+            fields[name] = value
         else:
             break
-        name_len, pos = h2_int(payload, pos, prefix)
-        name = payload[pos:pos + name_len].decode("latin-1")
-        pos += name_len
-        if payload[pos] & 0x80:
-            break
-        value_len, pos = h2_int(payload, pos, 7)
-        value = payload[pos:pos + value_len].decode("latin-1")
-        pos += value_len
-        fields[name] = value
     return fields
 
 
