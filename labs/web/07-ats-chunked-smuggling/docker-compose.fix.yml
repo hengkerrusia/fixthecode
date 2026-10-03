@@ -1,0 +1,8 @@
+# Overlay untuk fase 2: build service proxy dari ./fix/proxy
+# (hasil hardening-mu), service lain tetap pristine.
+#
+# Cara pakai:
+#   docker compose -f docker-compose.yml -f docker-compose.fix.yml up --build -d
+services:
+  proxy:
+    build: ./fix/proxy
