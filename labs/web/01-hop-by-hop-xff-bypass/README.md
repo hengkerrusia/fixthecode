@@ -41,6 +41,30 @@ kiriman klien, hop berikutnya mengonsumsi daftar itu (menghapus header yang dise
 lalu menulis ulang `X-Forwarded-For` dengan IP hop sebelumnya (IP internal).
 Backend yang membuat keputusan akses berdasarkan XFF pun tertipu.
 
+## Akar Masalah
+
+HTTP membedakan dua jenis header (RFC 9110 §7.6.1): *end-to-end* (diteruskan
+sampai origin) dan *hop-by-hop* (hanya berlaku untuk satu hop, **wajib
+dikonsumsi** proxy dan tidak boleh diteruskan). Daftar header hop-by-hop
+dibawa oleh header `Connection` itu sendiri.
+
+Rantai ini rusak di dua titik yang saling menguatkan:
+
+1. **Frontend meneruskan `Connection` kiriman klien.** Seharusnya setiap hop
+   mengonsumsi header ini di batasnya sendiri. Karena diteruskan, penyerang
+   dari jaringan luar bisa mendikte header apa saja yang dihapus hop
+   berikutnya — termasuk header yang dipercaya lapisan aplikasi.
+2. **Keputusan akses bertumpu pada header yang ditulis ulang perantara.**
+   Mid menimpa `X-Forwarded-For` dengan IP hop sebelumnya (IP internal),
+   lalu app percaya begitu saja pada XFF untuk membuka `/admin`. Trust
+   boundary-nya rapuh: keputusan keamanan diambil dari data yang melewati
+   pemrosesan yang bisa dipengaruhi penyerang.
+
+Bentuk umumnya: *satu hop meneruskan metadata framing kiriman penyerang,
+hop berikutnya menindaklanjutinya*. Bentuk amannya: tiap hop membersihkan
+header hop-by-hop di batasnya sendiri, dan keputusan akses tidak boleh
+bergantung pada header yang ditulis ulang perantara.
+
 ## Fase 1 — Hacking
 
 **Objektif:** dapatkan `HTTP 200` dari `GET /admin` (baseline normal: `403`).
