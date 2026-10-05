@@ -1,0 +1,7 @@
+# Overlay FASE 2: gateway dibangun dari fix/gateway (hasil kerjamu),
+# backend tetap pristine. Dipakai via:
+#   docker compose -f docker-compose.yml -f docker-compose.fix.yml up
+services:
+  gateway:
+    build:
+      context: ./fix/gateway
