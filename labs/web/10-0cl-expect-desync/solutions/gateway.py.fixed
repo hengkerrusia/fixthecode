@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Gateway HTTP/1.1 -> HTTP/1.1 untuk Lab 10.
+
+Meneruskan request HTTP/1.1 ke backend lewat satu koneksi keep-alive
+per koneksi klien, dengan penanganan Expect: 100-continue. Berbasis
+select() agar tidak deadlock saat backend tidak kunjung membalas.
+
+BUG (0.CL via Expect, ala Kettle 2025): bila backend membalas non-100
+untuk request dengan Expect: 100-continue, gateway "lupa" bahwa body
+masih harus diterima dari klien — request dianggap selesai (panjang
+0), dan byte body yang tiba kemudian diparse sebagai request baru.
+"""
+import os
+import select
+import socket
+import threading
+
+LISTEN_HOST = "0.0.0.0"
+LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "80"))
+BACKEND_HOST = os.environ.get("BACKEND_HOST", "backend")
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8000"))
+SELECT_TIMEOUT = 30
+MAX_HEAD = 65536
+
+
+def parse_headers(buf):
+    """Parse satu blok header. -> ((request_line, headers), hlen) | (None, 0)."""
+    idx = buf.find(b"\r\n\r\n")
+    if idx == -1:
+        return None, 0
+    try:
+        head = buf[:idx].decode("latin-1")
+    except UnicodeDecodeError:
+        return None, 0
+    lines = head.split("\r\n")
+    headers = []
+    for ln in lines[1:]:
+        if ":" in ln:
+            k, v = ln.split(":", 1)
+            headers.append((k.strip().lower(), v.strip()))
+    return (lines[0], headers), idx + 4
+
+
+def parse_response(buf):
+    """Parse satu respons. -> ((status, raw), total) | (None, 0)."""
+    idx = buf.find(b"\r\n\r\n")
+    if idx == -1:
+        return None, 0
+    try:
+        head = buf[:idx].decode("latin-1")
+    except UnicodeDecodeError:
+        return None, 0
+    parts = head.split("\r\n", 1)[0].split(" ", 2)
+    try:
+        status = int(parts[1])
+    except (IndexError, ValueError):
+        return None, 0
+    if status == 100:
+        return (status, buf[:idx + 4]), idx + 4
+    cl = 0
+    for ln in head.split("\r\n")[1:]:
+        if ":" in ln:
+            k, v = ln.split(":", 1)
+            if k.strip().lower() == "content-length":
+                try:
+                    cl = int(v.strip())
+                except ValueError:
+                    cl = 0
+    total = idx + 4 + cl
+    if len(buf) < total:
+        return None, 0
+    return (status, buf[:total]), total
+
+
+def get_cl(headers):
+    for k, v in headers:
+        if k == "content-length":
+            try:
+                return int(v)
+            except ValueError:
+                return 0
+    return 0
+
+
+def is_expect_100(headers):
+    for k, v in headers:
+        if k == "expect" and v.lower() == "100-continue":
+            return True
+    return False
+
+
+def handle_client(c_sock):
+    try:
+        b_sock = socket.create_connection(
+            (BACKEND_HOST, BACKEND_PORT), timeout=10)
+    except OSError:
+        try:
+            c_sock.close()
+        except OSError:
+            pass
+        return
+    cbuf = b""
+    bbuf = b""
+    # Jumlah respons yang diharapkan dari backend (satu per request
+    # yang diteruskan utuh).
+    pending = 0
+    # Request Expect yang headernya sudah diteruskan dan sedang menunggu
+    # balasan 100/non-100 dari backend: {"cl": int} | None.
+    awaiting = None
+    # Body yang harus dibaca dari klien setelah backend membalas 100:
+    # {"cl": int} | None.
+    need_body = None
+
+    def flush_client():
+        nonlocal cbuf, awaiting, need_body, pending
+        while True:
+            if awaiting is not None:
+                return
+            if need_body is not None:
+                cl = need_body["cl"]
+                if len(cbuf) < cl:
+                    return
+                b_sock.sendall(cbuf[:cl])
+                cbuf = cbuf[cl:]
+                need_body = None
+                pending += 1
+                continue
+            parsed, hlen = parse_headers(cbuf)
+            if parsed is None:
+                return
+            req_line, headers = parsed
+            if len(req_line.split(" ", 2)) < 2:
+                try:
+                    c_sock.sendall(b"HTTP/1.1 400 Bad Request\r\n"
+                                    b"Content-Length: 0\r\n\r\n")
+                except OSError:
+                    pass
+                raise ConnectionError("bad request line")
+            if is_expect_100(headers):
+                # FIX: tolak handshake Expect yang ambigu (fail-closed).
+                # Implementasi 100-continue yang cacat membuka celah 0.CL
+                # desync: balasan non-100 dari backend membuat gateway
+                # "lupa" body. Menolak lebih aman daripada meneruskan
+                # dengan semantik yang salah.
+                try:
+                    c_sock.sendall(b"HTTP/1.1 400 Bad Request\r\n"
+                                   b"Content-Length: 0\r\n\r\n")
+                except OSError:
+                    pass
+                raise ConnectionError("Expect: 100-continue ditolak")
+            cl = get_cl(headers)
+            if len(cbuf) < hlen + cl:
+                return
+            b_sock.sendall(cbuf[:hlen + cl])
+            pending += 1
+            cbuf = cbuf[hlen + cl:]
+
+    def flush_backend():
+        nonlocal bbuf, awaiting, need_body, pending
+        while True:
+            parsed, total = parse_response(bbuf)
+            if parsed is None:
+                return
+            status, raw = parsed
+            if awaiting is not None:
+                if status == 100:
+                    # Teruskan 100 ke klien agar ia mengirim body.
+                    try:
+                        c_sock.sendall(raw)
+                    except OSError:
+                        raise ConnectionError("client gone")
+                    need_body = {"cl": awaiting["cl"]}
+                    awaiting = None
+                    bbuf = bbuf[total:]
+                    flush_client()
+                    continue
+                # === BUG 0.CL: backend non-100 -> LUPA body! ===
+                # Respons diteruskan ke klien, request dianggap selesai
+                # (panjang 0). Body TIDAK dibaca/diteruskan; byte
+                # berikutnya dari klien diparse sebagai request baru.
+                try:
+                    c_sock.sendall(raw)
+                except OSError:
+                    raise ConnectionError("client gone")
+                awaiting = None
+                bbuf = bbuf[total:]
+                flush_client()
+                continue
+            if pending > 0:
+                pending -= 1
+            try:
+                c_sock.sendall(raw)
+            except OSError:
+                raise ConnectionError("client gone")
+            bbuf = bbuf[total:]
+
+    try:
+        while True:
+            r, _, _ = select.select([c_sock, b_sock], [], [],
+                                    SELECT_TIMEOUT)
+            if not r:
+                break
+            if c_sock in r:
+                try:
+                    data = c_sock.recv(65536)
+                except OSError:
+                    break
+                if not data:
+                    break
+                cbuf += data
+                if len(cbuf) > 10 * 1024 * 1024:
+                    break
+                try:
+                    flush_client()
+                except (OSError, ConnectionError):
+                    break
+            if b_sock in r:
+                try:
+                    data = b_sock.recv(65536)
+                except OSError:
+                    break
+                if not data:
+                    break
+                bbuf += data
+                if len(bbuf) > 10 * 1024 * 1024:
+                    break
+                try:
+                    flush_backend()
+                except (OSError, ConnectionError):
+                    break
+    except (OSError, ConnectionError):
+        pass
+    finally:
+        for s in (c_sock, b_sock):
+            try:
+                s.close()
+            except OSError:
+                pass
+
+
+def main():
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind((LISTEN_HOST, LISTEN_PORT))
+    srv.listen(64)
+    while True:
+        conn, _ = srv.accept()
+        threading.Thread(target=handle_client, args=(conn,),
+                         daemon=True).start()
+
+
+if __name__ == "__main__":
+    main()
