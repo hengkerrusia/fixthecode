@@ -1,0 +1,18 @@
+(function () {
+  var userId = new URLSearchParams(window.location.search).get("id") || "";
+  if (!/^[a-z0-9]{6,16}$/.test(userId)) {
+    document.getElementById("result").textContent = "invalid user id";
+    return;
+  }
+  function getCookie(name) {
+    var m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return m ? decodeURIComponent(m[2]) : "";
+  }
+  fetch("/v1/users/info/" + userId, {
+    headers: { "X-Auth-Token": getCookie("auth_token") }
+  }).then(function (r) { return r.json(); }).then(function (j) {
+    document.getElementById("result").textContent = j.name || "not found";
+  }).catch(function () {
+    document.getElementById("result").textContent = "request failed";
+  });
+})();
