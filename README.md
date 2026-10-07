@@ -40,16 +40,25 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 
 ## Daftar lab
 
-| # | Lab | Kelas kerentanan | Sumber |
-|---|-----|------------------|--------|
-| 1 | [`web/01-hop-by-hop-xff-bypass`](labs/web/01-hop-by-hop-xff-bypass/) | Hop-by-hop header abuse → X-Forwarded-For stripping → admin bypass | Nathan Davison, "Abusing HTTP hop-by-hop request headers" |
-| 2 | [`web/02-web-cache-deception`](labs/web/02-web-cache-deception/) | Web cache deception → halaman privat ter-cache publik | Omer Gil, "Web Cache Deception Attack" (PayPal, $3.000) |
-| 3 | [`web/03-unkeyed-input-xfh`](labs/web/03-unkeyed-input-xfh/) | Unkeyed input → X-Forwarded-Host cache poisoning | HackerOne #977851 (Shopify, $1.300 → $6.300) |
-| 4 | [`web/04-method-override`](labs/web/04-method-override/) | Method override → X-HTTP-Method-Override cache poisoning DoS | HackerOne #1160407 (GitLab, $2.500) |
-| 5 | [`web/05-cpdos-error-caching`](labs/web/05-cpdos-error-caching/) | CPDoS → error caching (403) → denial of service | "Your Cache Has Fallen" (CCS 2019); 403-caching $2.500 |
-| 6 | [`web/06-h2c-smuggling`](labs/web/06-h2c-smuggling/) | H2C smuggling → terowongan upgrade HTTP/2 cleartext → bypass proteksi /admin | Bishop Fox, h2csmuggler |
-| 7 | [`web/07-ats-chunked-smuggling`](labs/web/07-ats-chunked-smuggling/) | Chunked desync → parser chunked basi (stale CR flag) → request selundupan lolos ke origin | CVE-2025-65114 (ATS, CWE-444) |
-| 8 | [`web/08-paypal-clte-cache-poison`](labs/web/08-paypal-clte-cache-poison/) | CL.TE request smuggling → cache poisoning → stored XSS di /signin | HackerOne #488147 (PayPal, $18.900) |
+| # | Lab | Kategori | Kelas kerentanan | Sumber |
+|---|-----|----------|------------------|--------|
+| 1 | [`web/01-hop-by-hop-xff-bypass`](labs/web/01-hop-by-hop-xff-bypass/) | Hop-by-Hop Abuse | Hop-by-hop header abuse → X-Forwarded-For stripping → admin bypass | Nathan Davison, "Abusing HTTP hop-by-hop request headers" |
+| 2 | [`web/02-web-cache-deception`](labs/web/02-web-cache-deception/) | Cache Poisoning | Web cache deception → halaman privat ter-cache publik | Omer Gil, "Web Cache Deception Attack" (PayPal, $3.000) |
+| 3 | [`web/03-unkeyed-input-xfh`](labs/web/03-unkeyed-input-xfh/) | Cache Poisoning | Unkeyed input → X-Forwarded-Host cache poisoning | HackerOne #977851 (Shopify, $1.300 → $6.300) |
+| 4 | [`web/04-method-override`](labs/web/04-method-override/) | Cache Poisoning | Method override → X-HTTP-Method-Override cache poisoning DoS | HackerOne #1160407 (GitLab, $2.500) |
+| 5 | [`web/05-cpdos-error-caching`](labs/web/05-cpdos-error-caching/) | Cache Poisoning | CPDoS → error caching (403) → denial of service | "Your Cache Has Fallen" (CCS 2019); 403-caching $2.500 |
+| 6 | [`web/06-h2c-smuggling`](labs/web/06-h2c-smuggling/) | Request Smuggling | H2C smuggling → terowongan upgrade HTTP/2 cleartext → bypass proteksi /admin | Bishop Fox, h2csmuggler |
+| 7 | [`web/07-ats-chunked-smuggling`](labs/web/07-ats-chunked-smuggling/) | Request Smuggling | Chunked desync → parser chunked basi (stale CR flag) → request selundupan lolos ke origin | CVE-2025-65114 (ATS, CWE-444) |
+| 8 | [`web/08-paypal-clte-cache-poison`](labs/web/08-paypal-clte-cache-poison/) | Request Smuggling | CL.TE request smuggling → cache poisoning → stored XSS di /signin | HackerOne #488147 (PayPal, $18.900) |
+| 9 | [`web/09-h2-downgrade-desync`](labs/web/09-h2-downgrade-desync/) | Request Smuggling | H2.CL downgrade desync → frontend HTTP/2 vs backend HTTP/1 | James Kettle, "HTTP/2: The Sequel is Always Worse" (PortSwigger Research 2021) |
+| 10 | [`web/10-0cl-expect-desync`](labs/web/10-0cl-expect-desync/) | Request Smuggling | 0.CL desync via Expect: 100-continue | James Kettle, "HTTP/1.1 Must Die: The Desync Endgame" (PortSwigger Research 2025) |
+| 11 | [`web/11-cspt-csrf`](labs/web/11-cspt-csrf/) | CSPT | CSPT → CSRF | Doyensec, "CSPT2CSRF" (Maxence Schmitt, 2024) |
+| 12 | [`web/12-cspt-cache-deception`](labs/web/12-cspt-cache-deception/) | CSPT | CSPT → web cache deception → account takeover | zere.es, "Cache Deception + CSPT" (2025) |
+| 13 | [`web/13-cspt-stylesheet-injection`](labs/web/13-cspt-stylesheet-injection/) | CSPT | CSPT via stylesheet loader → open redirect → CSS injection | HackerOne #1245165 (Medi/Acronis, 2022) |
+| 14 | [`web/14-cspt-plugin-xss-ssrf`](labs/web/14-cspt-plugin-xss-ssrf/) | CSPT | CSPT via plugin loader → open redirect → XSS → SSRF | Grafana CVE-2025-4123 ("The Grafana Ghost") |
+
+Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
+otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
 
 ## Mulai cepat
 
