@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+import os
+import re
+import socket
+import threading
+from http.client import HTTPConnection
+from urllib.parse import urlsplit
+
+LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8080"))
+BACKEND_HOST = os.environ.get("BACKEND_HOST", "backend")
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8000"))
+UPSTREAM_BOUNDARY = "----lab17boundary"
+
+
+def parse_multipart(body, boundary):
+    delim = ("--" + boundary).encode("latin-1")
+    parts = []
+    for chunk in body.split(delim)[1:]:
+        if chunk.startswith(b"--"):
+            break
+        if chunk.startswith(b"\r\n"):
+            chunk = chunk[2:]
+        if chunk.endswith(b"\r\n"):
+            chunk = chunk[:-2]
+        if b"\r\n\r\n" not in chunk:
+            continue
+        head, content = chunk.split(b"\r\n\r\n", 1)
+        headers = []
+        for ln in head.decode("latin-1").split("\r\n"):
+            if ":" in ln:
+                k, v = ln.split(":", 1)
+                headers.append((k.strip().lower(), v.strip()))
+        parts.append((headers, content))
+    return parts
+
+
+def get_field(parts, name):
+    for headers, content in parts:
+        for k, v in headers:
+            if k == "content-disposition":
+                m = re.search(r'name="([^"]*)"', v)
+                if m and m.group(1) == name:
+                    return content
+    return None
+
+
+def handle_client(c_sock):
+    try:
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            chunk = c_sock.recv(65536)
+            if not chunk:
+                return
+            buf += chunk
+        head, rest = buf.split(b"\r\n\r\n", 1)
+        lines = head.decode("latin-1").split("\r\n")
+        parts = lines[0].split(" ")
+        headers = []
+        for ln in lines[1:]:
+            if ":" in ln:
+                k, v = ln.split(":", 1)
+                headers.append((k.strip().lower(), v.strip()))
+        cl = 0
+        for k, v in headers:
+            if k == "content-length":
+                try:
+                    cl = int(v)
+                except ValueError:
+                    cl = 0
+        while len(rest) < cl:
+            chunk = c_sock.recv(65536)
+            if not chunk:
+                return
+            rest += chunk
+        body = rest[:cl]
+
+        if len(parts) < 2 or parts[0] != "POST" \
+                or urlsplit(parts[1]).path != "/upload":
+            c_sock.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+            return
+
+        ctype = ""
+        for k, v in headers:
+            if k == "content-type":
+                ctype = v
+        m = re.search(r"boundary=([^\s;]+)", ctype)
+        if not m:
+            c_sock.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+            return
+        in_parts = parse_multipart(body, m.group(1).strip('"'))
+        filename_b = get_field(in_parts, "filename")
+        file_b = get_field(in_parts, "file")
+        if filename_b is None or file_b is None:
+            c_sock.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+            return
+        filename = filename_b.decode("latin-1")
+
+        upstream_body = (
+            "--" + UPSTREAM_BOUNDARY + "\r\n"
+            + 'Content-Disposition: form-data; name="file"; filename="%s"\r\n'
+            % filename
+            + "Content-Type: application/octet-stream\r\n"
+            + "\r\n"
+        ).encode("latin-1") + file_b \
+            + ("\r\n--" + UPSTREAM_BOUNDARY + "--\r\n").encode("latin-1")
+
+        c = HTTPConnection(BACKEND_HOST, BACKEND_PORT, timeout=10)
+        try:
+            c.request("POST", "/store", body=upstream_body,
+                      headers={"Content-Type":
+                               "multipart/form-data; boundary=" + UPSTREAM_BOUNDARY})
+            r = c.getresponse()
+            resp_body = r.read()
+            status = r.status
+        finally:
+            c.close()
+
+        c_sock.sendall(("HTTP/1.1 %d OK\r\nContent-Type: text/plain\r\n"
+                        "Content-Length: %d\r\nConnection: close\r\n\r\n"
+                        % (status, len(resp_body))).encode("latin-1") + resp_body)
+    except OSError:
+        pass
+    finally:
+        try:
+            c_sock.close()
+        except OSError:
+            pass
+
+
+def main():
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("0.0.0.0", LISTEN_PORT))
+    srv.listen(64)
+    while True:
+        conn, _ = srv.accept()
+        threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
+
+
+if __name__ == "__main__":
+    main()
