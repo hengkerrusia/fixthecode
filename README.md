@@ -56,6 +56,8 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 12 | [`web/12-cspt-cache-deception`](labs/web/12-cspt-cache-deception/) | CSPT | CSPT → web cache deception → account takeover | zere.es, "Cache Deception + CSPT" (2025) |
 | 13 | [`web/13-cspt-stylesheet-injection`](labs/web/13-cspt-stylesheet-injection/) | CSPT | CSPT via stylesheet loader → open redirect → CSS injection | HackerOne #1245165 (Medi/Acronis, 2022) |
 | 14 | [`web/14-cspt-plugin-xss-ssrf`](labs/web/14-cspt-plugin-xss-ssrf/) | CSPT | CSPT via plugin loader → open redirect → XSS → SSRF | Grafana CVE-2025-4123 ("The Grafana Ghost") |
+| 15 | [`web/15-crlf-response-splitting`](labs/web/15-crlf-response-splitting/) | CRLF Injection | CRLF injection -> response splitting -> session fixation | Pi-hole CVE-2025-59151 (GHSA-5v79-p56f-x7c4) |
+| 16 | [`web/16-crlf-desync`](labs/web/16-crlf-desync/) | CRLF Injection | CRLF-powered desync -> request splitting -> response queue poisoning | PortSwigger Research, "CRLF-Powered Desync Attacks" (2026) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.

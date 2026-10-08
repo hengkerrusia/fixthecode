@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+import os
+import socket
+import threading
+from urllib.parse import unquote
+
+LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8080"))
+BACKEND_HOST = os.environ.get("BACKEND_HOST", "backend")
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8000"))
+MAX_HEAD = 65536
+
+_lock = threading.Lock()
+_bsock = None
+_bbuf = b""
+
+
+def _parse_head(buf):
+    idx = buf.find(b"\r\n\r\n")
+    if idx == -1:
+        return None, 0
+    try:
+        lines = buf[:idx].decode("latin-1").split("\r\n")
+    except UnicodeDecodeError:
+        return None, 0
+    headers = []
+    for ln in lines[1:]:
+        if ":" in ln:
+            k, v = ln.split(":", 1)
+            headers.append((k.strip().lower(), v.strip()))
+    return (lines[0], headers), idx + 4
+
+
+def _content_length(headers):
+    for k, v in headers:
+        if k == "content-length":
+            try:
+                return int(v)
+            except ValueError:
+                return 0
+    return 0
+
+
+def _parse_response(buf):
+    idx = buf.find(b"\r\n\r\n")
+    if idx == -1:
+        return None, 0
+    try:
+        lines = buf[:idx].decode("latin-1").split("\r\n")
+    except UnicodeDecodeError:
+        return None, 0
+    parts = lines[0].split(" ", 2)
+    if len(parts) < 2 or not parts[1].isdigit():
+        return None, 0
+    hdrs = []
+    for ln in lines[1:]:
+        if ":" in ln:
+            k, v = ln.split(":", 1)
+            hdrs.append((k.strip().lower(), v.strip()))
+    total = idx + 4 + _content_length(hdrs)
+    if len(buf) < total:
+        return None, 0
+    return buf[:total], total
+
+
+def _backend_send_recv(request_bytes):
+    global _bsock, _bbuf
+    with _lock:
+        try:
+            if _bsock is None:
+                _bsock = socket.create_connection(
+                    (BACKEND_HOST, BACKEND_PORT), timeout=10)
+            _bsock.sendall(request_bytes)
+            while True:
+                parsed, total = _parse_response(_bbuf)
+                if parsed is not None:
+                    raw = _bbuf[:total]
+                    _bbuf = _bbuf[total:]
+                    return raw
+                chunk = _bsock.recv(65536)
+                if not chunk:
+                    raise ConnectionError("backend closed")
+                _bbuf += chunk
+        except (OSError, ConnectionError):
+            try:
+                if _bsock is not None:
+                    _bsock.close()
+            except OSError:
+                pass
+            _bsock = None
+            _bbuf = b""
+            raise
+
+
+def _read_client_request(c_sock, cbuf):
+    while True:
+        parsed, hlen = _parse_head(cbuf)
+        if parsed is not None:
+            break
+        chunk = c_sock.recv(65536)
+        if not chunk:
+            return None, cbuf
+        cbuf += chunk
+        if len(cbuf) > 10 * 1024 * 1024:
+            return None, cbuf
+    req_line, headers = parsed
+    parts = req_line.split(" ", 2)
+    if len(parts) < 3:
+        return "bad", cbuf
+    method, raw_target = parts[0], parts[1]
+    cl = _content_length(headers)
+    while len(cbuf) < hlen + cl:
+        chunk = c_sock.recv(65536)
+        if not chunk:
+            return None, cbuf
+        cbuf += chunk
+    return (method, raw_target, cbuf[:hlen + cl], hlen, cl), cbuf[hlen + cl:]
+
+
+def handle_client(c_sock):
+    cbuf = b""
+    try:
+        while True:
+            got, cbuf = _read_client_request(c_sock, cbuf)
+            if got is None:
+                break
+            if got == "bad":
+                try:
+                    c_sock.sendall(b"HTTP/1.1 400 Bad Request\r\n"
+                                   b"Content-Length: 0\r\n\r\n")
+                except OSError:
+                    pass
+                break
+            method, raw_target, blob, hlen, cl = got
+            head_text = blob[:hlen].decode("latin-1")
+            cut = head_text.find("\r\n")
+            upstream = (method + " " + unquote(raw_target) + " HTTP/1.1"
+                        + head_text[cut:]).encode("latin-1") + blob[hlen:hlen + cl]
+            try:
+                resp = _backend_send_recv(upstream)
+            except (OSError, ConnectionError):
+                break
+            try:
+                c_sock.sendall(resp)
+            except OSError:
+                break
+    finally:
+        try:
+            c_sock.close()
+        except OSError:
+            pass
+
+
+def main():
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("0.0.0.0", LISTEN_PORT))
+    srv.listen(64)
+    while True:
+        conn, _ = srv.accept()
+        threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
+
+
+if __name__ == "__main__":
+    main()
