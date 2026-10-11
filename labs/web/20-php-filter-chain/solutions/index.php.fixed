@@ -1,0 +1,9 @@
+<?php
+$allowed = ["templates/home.php", "templates/about.php"];
+$page = $_GET["page"] ?? "templates/home.php";
+if (!in_array($page, $allowed, true)) {
+    http_response_code(400);
+    echo "bad page";
+    exit;
+}
+include $page;
