@@ -1,0 +1,3 @@
+<?php
+$subdomain = $_GET['subdomain'] ?? 'default';
+require_once(dirname(__DIR__, 2) . '/wp-admin/admin.php');

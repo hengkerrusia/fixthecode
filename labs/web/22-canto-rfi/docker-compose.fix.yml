@@ -1,0 +1,4 @@
+services:
+  app:
+    volumes:
+      - ./fix/includes/lib/get.php:/var/www/html/includes/lib/get.php:ro
