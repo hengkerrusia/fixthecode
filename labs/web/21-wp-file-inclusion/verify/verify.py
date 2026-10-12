@@ -153,7 +153,7 @@ def baseline_checks(label):
     ok &= check("%s: halaman normal ter-render" % label,
                 s == 200 and "Halaman: hello-world" in body
                 and MARKER not in body, "status=%s" % s)
-    s, _ = post_raw("/page/", "pagename=hello-world&page_id=999")
+    s, _ = post_raw("/page/", "pagename=nope&page_id=999")
     ok &= check("%s: page_id invalid -> 404" % label, s == 404,
                 "status=%s" % s)
     return ok
