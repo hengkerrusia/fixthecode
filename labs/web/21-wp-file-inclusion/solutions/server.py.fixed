@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Mini-CMS: server halaman dengan resolusi template per halaman.
+
+Melayani halaman depan (/) dan halaman konten (/page/). Untuk setiap
+halaman konten, server memilih file template dari direktori tema
+berdasarkan parameter query, lalu me-render-nya.
+"""
+import os
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+THEME_DIR = os.path.join(BASE_DIR, "theme")
+
+PUBLISHED_PAGES = {
+    "1": "hello-world",
+}
+
+
+def raw_params(raw_query):
+    params = {}
+    for part in raw_query.split("&"):
+        if not part or "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        params[key] = value
+    return params
+
+
+def resolve_template(pagename):
+    name = urllib.parse.unquote(pagename)
+    candidate = os.path.join(THEME_DIR, "page-" + name + ".php")
+    resolved = os.path.realpath(candidate)
+    theme_root = os.path.realpath(THEME_DIR)
+    if os.path.commonpath([theme_root, resolved]) != theme_root:
+        return "BLOCKED"
+    if resolved.endswith(".php") and os.path.isfile(resolved) \
+            and os.access(resolved, os.R_OK):
+        return resolved
+    return None
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "MiniCMS/1.0"
+
+    def _params(self):
+        if self.command == "POST":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            return raw_params(self.rfile.read(length).decode("latin-1"))
+        return raw_params(urllib.parse.urlparse(self.path).query)
+
+    def _send(self, status, body):
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _render_default(self, slug):
+        with open(os.path.join(THEME_DIR, "page.php"), "rb") as fh:
+            template = fh.read().decode("utf-8")
+        self._send(200, template.replace("{{slug}}", slug))
+
+    def _handle_page(self):
+        params = self._params()
+        page_id = params.get("page_id", "")
+        pagename_raw = params.get("pagename", "")
+        pagename = urllib.parse.unquote(pagename_raw)
+
+        slug = ""
+        if page_id.isdigit() and page_id in PUBLISHED_PAGES:
+            slug = PUBLISHED_PAGES[page_id]
+        elif pagename in PUBLISHED_PAGES.values():
+            slug = pagename
+        if not slug:
+            self._send(404, "halaman tidak ditemukan")
+            return
+
+        template = resolve_template(pagename)
+        if template == "BLOCKED":
+            self._send(400, "template tidak valid")
+            return
+        if template is None:
+            self._render_default(slug)
+            return
+        with open(template, "rb") as fh:
+            self._send(200, fh.read())
+
+    def do_GET(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/":
+            self._send(200, "<html><body><h1>Beranda</h1>"
+                            "<p>Mini-CMS demo.</p></body></html>")
+        elif path == "/page/":
+            self._handle_page()
+        else:
+            self._send(404, "tidak ditemukan")
+
+    def do_POST(self):
+        self.do_GET()
+
+    def log_message(self, fmt, *args):
+        pass
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "8080"))
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()
