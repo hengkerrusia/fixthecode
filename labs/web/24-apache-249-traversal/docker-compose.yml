@@ -1,0 +1,5 @@
+services:
+  apache:
+    build: ./apache
+    ports:
+      - "8080:80"
