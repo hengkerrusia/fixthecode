@@ -67,6 +67,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 23 | [`web/23-gitlab-maven-traversal`](labs/web/23-gitlab-maven-traversal/) | Path Traversal | GitLab Maven traversal -> tulis authorized_keys -> RCE | HackerOne #733072 |
 | 24 | [`web/24-apache-249-traversal`](labs/web/24-apache-249-traversal/) | Path Traversal | Apache 2.4.49 path traversal -> file read via Alias | CVE-2021-41773 (HackerOne #1394916) |
 | 25 | [`web/25-mopub-openredirect-xss`](labs/web/25-mopub-openredirect-xss/) | Open Redirect | Login open redirect -> XSS via javascript: URI | HackerOne #683298 (MoPub, jackb898) |
+| 26 | [`web/26-expo-oauth-openredirect`](labs/web/26-expo-oauth-openredirect/) | Open Redirect | OAuth proxy returnUrl -> token di fragment -> ATO via hTTps:// bypass | CVE-2023-28131 (Salt Labs, CVSS 9.6) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
