@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlsplit, parse_qs
+
+USERS = {"demo": "demo123"}
+
+LANDING = """<!doctype html>
+<html><head><title>Publisher Portal</title></head>
+<body><h1>Publisher Portal</h1>
+<p>Manage your ad inventory.</p>
+<p><a href="/login?next=/dashboard">Sign in</a></p>
+</body></html>"""
+
+LOGIN_FORM = """<!doctype html>
+<html><head><title>Sign in — Publisher Portal</title></head>
+<body><h1>Sign in</h1>
+<form method="post" action="/login">
+<input type="hidden" name="next" value="__NEXT__">
+<label>Username <input name="username" autocomplete="username"></label><br>
+<label>Password <input type="password" name="password" autocomplete="current-password"></label><br>
+<button type="submit">Sign in</button>
+</form></body></html>"""
+
+REDIRECT_PAGE = """<!doctype html>
+<html><head><title>Signing you in</title></head>
+<body><p>Welcome. Taking you to your destination&hellip;</p>
+<script>window.location.href = "__NEXT__";</script>
+</body></html>"""
+
+DASHBOARD = """<!doctype html>
+<html><head><title>Dashboard — Publisher Portal</title></head>
+<body><h1>Dashboard</h1><p>Revenue today: $1,337.00</p></body></html>"""
+
+
+def esc_attr(s):
+    return (s.replace("&", "&amp;").replace('"', "&quot;")
+             .replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def safe_next(v):
+    if not v or "\\" in v:
+        return False
+    if not v.startswith("/") or v.startswith("//"):
+        return False
+    u = urlsplit(v)
+    return u.scheme == "" and u.netloc == ""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code, body, ctype="text/html; charset=utf-8"):
+        data = body.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        u = urlsplit(self.path)
+        if u.path == "/":
+            self._send(200, LANDING)
+        elif u.path == "/login":
+            nxt = parse_qs(u.query).get("next", ["/dashboard"])[0]
+            self._send(200, LOGIN_FORM.replace("__NEXT__", esc_attr(nxt)))
+        elif u.path == "/dashboard":
+            self._send(200, DASHBOARD)
+        else:
+            self._send(404, "<h1>Not found</h1>")
+
+    def do_POST(self):
+        u = urlsplit(self.path)
+        if u.path != "/login":
+            self._send(404, "<h1>Not found</h1>")
+            return
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        form = parse_qs(self.rfile.read(n).decode("utf-8", "replace"))
+        username = form.get("username", [""])[0]
+        password = form.get("password", [""])[0]
+        nxt = form.get("next", ["/dashboard"])[0]
+        if USERS.get(username) != password:
+            self._send(401, "<h1>Invalid credentials</h1>")
+            return
+        if not safe_next(nxt):
+            self._send(400, "<h1>Invalid redirect target</h1>")
+            return
+        self._send(200, REDIRECT_PAGE.replace("__NEXT__", nxt))
+
+    def log_message(self, *args):
+        pass
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 80), Handler).serve_forever()
