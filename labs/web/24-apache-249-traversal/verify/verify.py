@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Verifier otomatis 2 fase untuk Lab 24 (CVE-2021-41773, Apache 2.4.49 path traversal).
 
-Rantai: GET /cgi-bin/.%2e/.%2e/.%2e/.%2e/etc/passwd. Normalisasi path
+Rantai: GET /icons/.%2e/.%2e/.%2e/.%2e/etc/passwd. Normalisasi path
 Apache 2.4.49 mendecode "%2e" menjadi "." SETELAH pemeriksaan "..",
 sehingga segmen ".%2e" lolos sebagai ".." dan request yang masuk lewat
-ScriptAlias /cgi-bin/ dipetakan ke file di luar direktori web —
-primitif *read* via traversal. Pelajaran inti: validasi path harus
+Alias /icons/ dipetakan ke file di luar direktori web — disajikan
+sebagai file biasa oleh default handler (primitif *read* via traversal).
+(Via ScriptAlias /cgi-bin/ request yang sama jatuh ke mod_cgi yang
+mencoba mengeksekusi targetnya.) Pelajaran inti: validasi path harus
 dilakukan SETELAH canonicalization selesai, bukan sebelumnya; dan
 postur deny-by-default ("Require all denied") membuat bypass semacam
 ini gagal secara fail-closed.
