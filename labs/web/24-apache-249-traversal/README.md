@@ -10,6 +10,7 @@ Konfigurasinya standar untuk zamannya:
 
 - `DocumentRoot` melayani halaman utama (`/`).
 - `ScriptAlias /cgi-bin/` dengan `mod_cgi` aktif melayani skrip CGI.
+- `Alias /icons/` untuk aset ikon.
 
 Versi 2.4.49 membawa perubahan pada fungsi normalisasi path
 (`ap_normalize_path`) — dan perubahan itulah yang cacat. Targetmu:
@@ -60,8 +61,11 @@ normalizer disentuh, seluruh asumsi validasi di atasnya harus diuji ulang.
    `GET /cgi-bin/hello.sh` (CGI berjalan). Catat header `Server`
    untuk fingerprint versi.
 2. **Probe.** Uji bagaimana server menangani segmen path yang tidak
-   biasa pada path di bawah direktori yang di-alias (`ScriptAlias`) —
-   khususnya dot yang ditulis dalam bentuk ter-encode.
+   biasa pada path di bawah direktori yang di-alias (`Alias` maupun
+   `ScriptAlias`) — khususnya dot yang ditulis dalam bentuk ter-encode.
+   Perhatikan bahwa tiap alias punya handler berbeda: hasilnya bisa
+   berbeda antara satu alias dan alias lainnya, dan perbedaan itu
+   sendiri adalah informasi.
 3. **Diferensial.** Bandingkan respons path normal vs path dengan segmen
    ter-encode. Cari penanda bahwa respons berasal dari file di luar
    `DocumentRoot` (isi `/etc/passwd` selalu diawali `root:`).
