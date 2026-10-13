@@ -168,8 +168,9 @@ def fase2():
                {"account_id": VICTIM, "email": ATTACKER[0], "role": "admin"},
                token=tok)
     check("serangan referensi GAGAL: lintas merchant -> 403", s == 403, s)
-    check("serangan referensi GAGAL: tidak tertanam",
-          not state_proves_escalation(), "tertancap?" )
+    planted = state_proves_escalation()
+    check("serangan referensi GAGAL: tidak tertanam", not planted,
+          "bersih" if not planted else "tertancap!")
     s, d = req("POST", "/businessmanage/users/api/v1/users",
                {"account_id": OWN, "email": "alice@tokoberkah.com",
                 "role": "member"}, token=tok)
