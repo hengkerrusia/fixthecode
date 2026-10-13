@@ -164,7 +164,7 @@ def main():
 
     untouched = True
     for rel in FIX_FILES:
-        a = os.path.join(LAB_DIR, "apache", rel)
+        a = os.path.join(LAB_DIR, rel)
         b = os.path.join(LAB_DIR, "fix", rel)
         if not (os.path.isfile(a) and os.path.isfile(b)):
             untouched = False
