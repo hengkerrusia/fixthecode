@@ -60,6 +60,13 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 16 | [`web/16-crlf-desync`](labs/web/16-crlf-desync/) | CRLF Injection | CRLF-powered desync -> request splitting -> response queue poisoning | PortSwigger Research, "CRLF-Powered Desync Attacks" (2026) |
 | 17 | [`web/17-formdata-crlf`](labs/web/17-formdata-crlf/) | CRLF Injection | CRLF via multipart filename -> header part injection | form-data CVE-2026-12143 (GHSA-hmw2-7cc7-3qxx) |
 | 18 | [`web/18-morgan-log-forging`](labs/web/18-morgan-log-forging/) | CRLF Injection | CRLF di Basic-auth username -> log forging | morgan CVE-2026-5078 (GHSA-4vj7-5mj6-jm8m) |
+| 19 | [`web/19-zip-slip`](labs/web/19-zip-slip/) | File Inclusion | Zip Slip -> arbitrary file write via nama entry archive | Snyk Research Team, "Zip Slip" (CVE-2018-1002203) |
+| 20 | [`web/20-php-filter-chain`](labs/web/20-php-filter-chain/) | File Inclusion | PHP filter chains -> LFI to RCE tanpa upload | Synacktiv, "PHP filter chains" (2022) |
+| 21 | [`web/21-wp-file-inclusion`](labs/web/21-wp-file-inclusion/) | File Inclusion | WordPress file inclusion -> canonicalization tanpa containment | CVE-2026-87902 (Robert Ressl) |
+| 22 | [`web/22-canto-rfi`](labs/web/22-canto-rfi/) | File Inclusion | Canto RFI -> require_once() -> RCE via data:// | CVE-2023-3452 (Wordfence, CVSS 9.8) |
+| 23 | [`web/23-gitlab-maven-traversal`](labs/web/23-gitlab-maven-traversal/) | Path Traversal | GitLab Maven traversal -> tulis authorized_keys -> RCE | HackerOne #733072 |
+| 24 | [`web/24-apache-249-traversal`](labs/web/24-apache-249-traversal/) | Path Traversal | Apache 2.4.49 path traversal -> file read via Alias | CVE-2021-41773 (HackerOne #1394916) |
+| 25 | [`web/25-mopub-openredirect-xss`](labs/web/25-mopub-openredirect-xss/) | Open Redirect | Login open redirect -> XSS via javascript: URI | HackerOne #683298 (MoPub, jackb898) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
