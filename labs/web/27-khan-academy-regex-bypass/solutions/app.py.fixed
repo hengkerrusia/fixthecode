@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Mock login page with regex-based continue validation. stdlib only."""
+
+import json
+import re
+import secrets
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlsplit, parse_qs
+
+KA_DOMAIN_REGEX = re.compile(
+    r"(^|\.)(khanacademy\.(org|dev|test|local)|kastatic\.org|.*-6fmjyrz2lq-uc\.a\.run\.app)$"
+)
+
+TRANSFER = {}
+SESSIONS = {}
+
+
+def continue_allowed(url):
+    try:
+        host = urlsplit(url).netloc.split(":")[0].lower()
+    except Exception:
+        return False
+    return bool(host) and KA_DOMAIN_REGEX.search(host) is not None
+
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body=b"", ctype="text/html", extra=None):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        for k, v in (extra or {}).items():
+            if isinstance(v, list):
+                for i in v:
+                    self.send_header(k, i)
+            else:
+                self.send_header(k, v)
+        self.end_headers()
+        if body:
+            self.wfile.write(body)
+
+    def _redirect(self, loc):
+        self.send_response(302)
+        self.send_header("Location", loc)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _cookie(self, name):
+        for part in self.headers.get("Cookie", "").split(";"):
+            part = part.strip()
+            if part.startswith(name + "="):
+                return part[len(name) + 1:]
+        return ""
+
+    def do_GET(self):
+        parts = urlsplit(self.path)
+        q = parse_qs(parts.query)
+        if parts.path == "/":
+            self._send(200, b"<h1>Demo Academy Login</h1>")
+        elif parts.path == "/login":
+            cont = q.get("continue", [""])[0]
+            body = ('<h1>Login</h1><form method="POST" action="/login">'
+                    '<input name="username" value="victim">'
+                    '<input name="password" type="password" value="x">'
+                    '<input name="continue" type="hidden" value="%s">'
+                    '<button type="submit">Login</button></form>' % cont).encode()
+            self._send(200, body)
+        elif parts.path == "/transfer_auth":
+            key = q.get("key", [""])[0]
+            user = TRANSFER.pop(key, None)
+            if not user:
+                self._send(401, b"bad or expired key")
+                return
+            sid = "sess_" + secrets.token_hex(8)
+            SESSIONS[sid] = user
+            self._send(200, b"session issued", extra={"Set-Cookie": [
+                "KAAS=%s; Path=/; HttpOnly" % sid,
+                "KAAL=%s; Path=/; HttpOnly" % sid,
+                "KAAC=%s; Path=/; HttpOnly" % sid]})
+        elif parts.path == "/me":
+            user = SESSIONS.get(self._cookie("KAAS"), "")
+            if user:
+                self._send(200, json.dumps({"account": user + "@khan.demo"}).encode(),
+                           "application/json")
+            else:
+                self._send(401, b"unauthorized")
+        else:
+            self._send(404, b"not found")
+
+    def do_POST(self):
+        parts = urlsplit(self.path)
+        if parts.path != "/login":
+            self._send(404, b"not found")
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        form = parse_qs(self.rfile.read(length).decode() if length else "")
+        user = form.get("username", ["victim"])[0]
+        cont = form.get("continue", [""])[0]
+        if not continue_allowed(cont):
+            self._send(400, b"bad continue")
+            return
+        tok = "tok_" + secrets.token_hex(4)
+        TRANSFER[tok] = user
+        self._redirect(cont.rstrip("/") + "/transfer_auth?key=" + tok)
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 8080), H).serve_forever()
