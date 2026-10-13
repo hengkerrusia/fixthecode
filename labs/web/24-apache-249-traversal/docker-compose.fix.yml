@@ -1,0 +1,4 @@
+services:
+  apache:
+    volumes:
+      - ./fix/apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
