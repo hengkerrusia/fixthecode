@@ -72,6 +72,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 28 | [`web/28-paypal-idor-privesc`](labs/web/28-paypal-idor-privesc/) | IDOR | API | PayPal IDOR tambah-user lintas merchant → privilege escalation | HackerOne #415081 (born2hack, High 7.1, $10.500) |
 | 29 | [`web/29-valve-cdkeys-idor`](labs/web/29-valve-cdkeys-idor/) | IDOR | API | Valve partner CD keys IDOR -> sedot key game milik partner lain | HackerOne #391217 (moskowsky, Critical, $20.000) |
 | 30 | [`web/30-stripe-email-idor-ato`](labs/web/30-stripe-email-idor-ato/) | IDOR | API | Stripe email change IDOR -> ganti email korban -> password-reset -> ATO | HackerOne #1250037 (dk82hg, Critical) |
+| 31 | [`web/31-gitlab-reset-array-pollution`](labs/web/31-gitlab-reset-array-pollution/) | Parameter Pollution | API | GitLab password reset array pollution -> reset link ke email attacker -> ATO | HackerOne #2293343 (asterion04, Critical, $35.000) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
