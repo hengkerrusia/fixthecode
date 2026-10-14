@@ -1,0 +1,120 @@
+import json
+import secrets
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
+
+USERS = {
+    "User:1": {"first_name": "Amelia", "last_name": "Hartono",
+               "email": "amelia.hartono@lab.test", "affiliation": "Institute of Advanced Studies",
+               "title": "Senior Researcher", "avatar_url": "/avatars/1.png",
+               "password": "pw-user-1"},
+    "User:2": {"first_name": "Budi", "last_name": "Santoso",
+               "email": "budi.santoso@lab.test", "affiliation": "National Laboratory",
+               "title": "Lab Director", "avatar_url": "/avatars/2.png",
+               "password": "pw-user-2"},
+    "User:3": {"first_name": "Citra", "last_name": "Lestari",
+               "email": "citra.lestari@lab.test", "affiliation": "Institute of Advanced Studies",
+               "title": "PhD Candidate", "avatar_url": "/avatars/3.png",
+               "password": "pw-user-3"},
+    "User:4": {"first_name": "Dedi", "last_name": "Pratama",
+               "email": "dedi.pratama@lab.test", "affiliation": "Ministry of Research",
+               "title": "Policy Advisor", "avatar_url": "/avatars/4.png",
+               "password": "pw-user-4"},
+    "User:5": {"first_name": "Eka", "last_name": "Wulandari",
+               "email": "eka.wulandari@lab.test", "affiliation": "National Laboratory",
+               "title": "System Administrator", "avatar_url": "/avatars/5.png",
+               "password": "pw-user-5"},
+    "User:100": {"first_name": "Analyst", "last_name": "Umum",
+                 "email": "analyst@lab.test", "affiliation": "Institute of Advanced Studies",
+                 "title": "Guest Analyst", "avatar_url": "/avatars/100.png",
+                 "password": "analyst-pw"},
+}
+
+SESSIONS = {}
+
+PUBLIC_FIELDS = ("first_name", "last_name", "email", "affiliation", "title", "avatar_url")
+
+
+def uid_of_email(email):
+    for uid, u in USERS.items():
+        if u["email"] == email:
+            return uid
+    return None
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "Lab32/1.0"
+
+    def _send(self, code, obj):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _body(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n else b""
+        try:
+            return json.loads(raw.decode()) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return {}
+
+    def _auth(self):
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return SESSIONS.get(auth[7:])
+        return None
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        parts = urlparse(self.path)
+        if parts.path == "/me":
+            uid = self._auth()
+            if not uid:
+                self._send(401, {"error": "unauthorized"})
+                return
+            self._send(200, {"user_id": uid, "email": USERS[uid]["email"]})
+            return
+        self._send(404, {"error": "not found"})
+
+    def do_POST(self):
+        parts = urlparse(self.path)
+        body = self._body()
+        if parts.path == "/login":
+            uid = uid_of_email(body.get("email", ""))
+            if not uid or USERS[uid]["password"] != body.get("password", ""):
+                self._send(401, {"error": "invalid credentials"})
+                return
+            token = "tok_%s_%s" % (uid.replace(":", "_"), secrets.token_hex(4))
+            SESSIONS[token] = uid
+            self._send(200, {"token": token})
+            return
+        if parts.path == "/api/principals":
+            me = self._auth()
+            if not me:
+                self._send(401, {"error": "unauthorized"})
+                return
+            values = body.get("values", [])
+            if not isinstance(values, list):
+                values = []
+            out = {}
+            for v in values:
+                u = USERS.get(v)
+                if u and v == me:
+                    out[v] = {k: u[k] for k in PUBLIC_FIELDS}
+                else:
+                    out[v] = {"invalid": True}
+            self._send(200, out)
+            return
+        self._send(404, {"error": "not found"})
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
