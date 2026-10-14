@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Mock Steam partner portal API. stdlib only."""
+
+import json
+import secrets
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlsplit, parse_qs
+
+PARTNERS = {
+    "partner_2001": {"name": "Pixel Quest Studio"},
+    "partner_2002": {"name": "Galaxy Empires Inc"},
+}
+
+USERS = {
+    "dev@pixelquest.dev": {"password": "devpw", "partner": "partner_2001"},
+    "aaa@galaxyempires.com": {"password": "galaxypw", "partner": "partner_2002"},
+}
+
+GAMES = {
+    "game_5001": {"name": "Pixel Quest", "partner": "partner_2001"},
+    "game_5002": {"name": "Galaxy Empires", "partner": "partner_2002"},
+}
+
+KEYS = {
+    "game_5001": [
+        "PXQST-K7D2M-9Q4FA-3Z8HN-1W2XE",
+        "PXQST-R5T8Y-2U1IP-6O0PL-9K8JM",
+        "PXQST-N3B4V-5C6X7-Z8A9S-0D1FG",
+        "PXQST-H2J3K-4L5M6-N7P8Q-9R0ST",
+        "PXQST-U1V2W-3X4Y5-Z6A7B-8C9DE",
+    ],
+    "game_5002": [
+        "GXEMP-A1B2C-3D4E5-F6G7H-8J9K0",
+        "GXEMP-L1M2N-3P4Q5-R6S7T-8U9V0",
+        "GXEMP-W1X2Y-3Z4A5-B6C7D-8E9F0",
+        "GXEMP-G1H2J-3K4L5-M6N7P-8Q9R0",
+        "GXEMP-S1T2U-3V4W5-X6Y7Z-8A9B0",
+    ],
+}
+
+SESSIONS = {}
+
+
+def partner_of(email):
+    return USERS[email]["partner"]
+
+
+def is_owner(email, game_id):
+    return GAMES.get(game_id, {}).get("partner") == partner_of(email)
+
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, obj, ctype="application/json"):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _auth(self):
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return SESSIONS.get(auth[7:], "")
+        return ""
+
+    def _body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+
+    def do_GET(self):
+        parts = urlsplit(self.path)
+        q = parse_qs(parts.query)
+        if parts.path == "/":
+            self._send(200, {"service": "partner portal api"})
+        elif parts.path == "/games":
+            self._send(200, [{"id": k, "name": v["name"]}
+                             for k, v in GAMES.items()])
+        elif parts.path == "/me":
+            email = self._auth()
+            if not email:
+                self._send(401, {"error": "unauthorized"})
+                return
+            self._send(200, {"email": email, "partner": partner_of(email)})
+        elif parts.path == "/partnercdkeys/assignkeys":
+            email = self._auth()
+            if not email:
+                self._send(401, {"error": "unauthorized"})
+                return
+            game_id = q.get("game_id", [""])[0]
+            if game_id not in GAMES:
+                self._send(404, {"error": "unknown game"})
+                return
+            if not is_owner(email, game_id):
+                self._send(403, {"error": "forbidden"})
+                return
+            self._send(200, {"game_id": game_id, "keys": KEYS[game_id]})
+        else:
+            self._send(404, {"error": "not found"})
+
+    def do_POST(self):
+        parts = urlsplit(self.path)
+        if parts.path == "/login":
+            data = self._body()
+            u = USERS.get(data.get("email", ""), {})
+            if u and u["password"] == data.get("password", ""):
+                tok = "sess_" + secrets.token_hex(8)
+                SESSIONS[tok] = data["email"]
+                self._send(200, {"token": tok})
+            else:
+                self._send(401, {"error": "bad credentials"})
+            return
+        self._send(404, {"error": "not found"})
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 8080), H).serve_forever()
