@@ -1,0 +1,118 @@
+import json
+import secrets
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
+
+USERS = {
+    "user_9001": {"name": "attacker", "email": "attacker@lab.test", "password": "attacker-pw"},
+    "user_9002": {"name": "victim", "email": "victim@lab.test", "password": "victim-pw"},
+}
+
+SESSIONS = {}
+RESETS = {}
+
+
+def email_of(uid):
+    return USERS[uid]["email"]
+
+
+def uid_of_email(email):
+    for uid, u in USERS.items():
+        if u["email"] == email:
+            return uid
+    return None
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "Lab30/1.0"
+
+    def _send(self, code, obj):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _body(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n else b""
+        try:
+            return json.loads(raw.decode()) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return {}
+
+    def _auth(self):
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return SESSIONS.get(auth[7:])
+        return None
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        parts = urlparse(self.path)
+        if parts.path == "/users":
+            self._send(200, {"users": [{"user_id": uid, "name": u["name"]} for uid, u in USERS.items()]})
+            return
+        if parts.path == "/me":
+            uid = self._auth()
+            if not uid:
+                self._send(401, {"error": "unauthorized"})
+                return
+            self._send(200, {"user_id": uid, "email": email_of(uid)})
+            return
+        self._send(404, {"error": "not found"})
+
+    def do_POST(self):
+        parts = urlparse(self.path)
+        body = self._body()
+        if parts.path == "/login":
+            uid = uid_of_email(body.get("email", ""))
+            if not uid or USERS[uid]["password"] != body.get("password", ""):
+                self._send(401, {"error": "invalid credentials"})
+                return
+            token = "tok_%s_%s" % (uid, secrets.token_hex(4))
+            SESSIONS[token] = uid
+            self._send(200, {"token": token})
+            return
+        if parts.path == "/account/email":
+            me = self._auth()
+            if not me:
+                self._send(401, {"error": "unauthorized"})
+                return
+            target = body.get("user_id", "")
+            new_email = body.get("email", "")
+            if target not in USERS or not new_email:
+                self._send(404, {"error": "unknown user"})
+                return
+            USERS[target]["email"] = new_email
+            self._send(200, {"user_id": target, "email": new_email})
+            return
+        if parts.path == "/account/password-reset":
+            uid = uid_of_email(body.get("email", ""))
+            if not uid:
+                self._send(404, {"error": "unknown email"})
+                return
+            token = "rst_%s" % secrets.token_hex(8)
+            RESETS[token] = uid
+            self._send(200, {"reset_token": token})
+            return
+        if parts.path == "/account/password-reset/confirm":
+            uid = RESETS.pop(body.get("reset_token", ""), None)
+            new_pw = body.get("new_password", "")
+            if not uid or not new_pw:
+                self._send(400, {"error": "invalid reset"})
+                return
+            USERS[uid]["password"] = new_pw
+            self._send(200, {"ok": True})
+            return
+        self._send(404, {"error": "not found"})
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
