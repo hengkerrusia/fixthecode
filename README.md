@@ -70,6 +70,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 26 | [`web/26-expo-oauth-openredirect`](labs/web/26-expo-oauth-openredirect/) | Open Redirect | OAuth flow | OAuth proxy returnUrl -> token di fragment -> ATO via hTTps:// bypass | CVE-2023-28131 (Salt Labs, CVSS 9.6) |
 | 27 | [`web/27-khan-academy-regex-bypass`](labs/web/27-khan-academy-regex-bypass/) | Open Redirect | Login form | Regex allowlist lupa escape titik -> 1-click ATO via transfer token | HackerOne #3723458 (Khan Academy) |
 | 28 | [`web/28-paypal-idor-privesc`](labs/web/28-paypal-idor-privesc/) | IDOR | API | PayPal IDOR tambah-user lintas merchant → privilege escalation | HackerOne #415081 (born2hack, High 7.1, $10.500) |
+| 29 | [`web/29-valve-cdkeys-idor`](labs/web/29-valve-cdkeys-idor/) | IDOR | API | Valve partner CD keys IDOR -> sedot key game milik partner lain | HackerOne #391217 (moskowsky, Critical, $20.000) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
