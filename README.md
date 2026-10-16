@@ -75,6 +75,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 31 | [`web/31-gitlab-reset-array-pollution`](labs/web/31-gitlab-reset-array-pollution/) | Parameter Pollution | API | GitLab password reset array pollution -> reset link ke email attacker -> ATO | HackerOne #2293343 (asterion04, Critical, $35.000) |
 | 32 | [`web/32-indico-principals-bola`](labs/web/32-indico-principals-bola/) | IDOR | API | Indico BOLA /api/principals -> enumerasi user ID -> PII exposure | CVE-2025-53640 (rafaelcorvino1, CWE-639) |
 | 33 | [`web/33-krayin-bola-password-reset`](labs/web/33-krayin-bola-password-reset/) | IDOR | Web | Krayin CRM BOLA /admin/settings/users/edit/{id} -> password reset -> ATO | CVE-2026-38529 (trexnegro, CWE-269/639) |
+| 34 | [`web/34-confluence-setup-bfla`](labs/web/34-confluence-setup-bfla/) | BFLA | Web | Confluence BFLA setup re-run -> flip setupComplete -> buat admin baru -> ATO | CVE-2023-22515 (Atlassian, CVSS 10.0) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
