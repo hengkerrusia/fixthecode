@@ -77,6 +77,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 33 | [`web/33-krayin-bola-password-reset`](labs/web/33-krayin-bola-password-reset/) | IDOR | Web | Krayin CRM BOLA /admin/settings/users/edit/{id} -> password reset -> ATO | CVE-2026-38529 (trexnegro, CWE-269/639) |
 | 34 | [`web/34-confluence-setup-bfla`](labs/web/34-confluence-setup-bfla/) | BFLA | Web | Confluence BFLA setup re-run -> flip setupComplete -> buat admin baru -> ATO | CVE-2023-22515 (Atlassian, CVSS 10.0) |
 | 35 | [`web/35-opensourcepos-classic-csrf`](labs/web/35-opensourcepos-classic-csrf/) | CSRF | Web | OpenSourcePOS classic CSRF POST /users tanpa token -> rogue admin -> ATO | CVE-2025-68434 (GHSA-wjm4-hfwg-5w5r, CVSS 8.8) |
+| 36 | [`web/36-fastapiusers-login-csrf`](labs/web/36-fastapiusers-login-csrf/) | CSRF | Web | fastapi-users login CSRF: state token stateless -> SSO identity penyerang ter-link ke akun korban -> ATO | CVE-2025-68481 (GHSA-5j53-63w8-8625) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
