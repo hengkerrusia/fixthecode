@@ -1,0 +1,251 @@
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
+
+STATE_AUDIENCE = "fastapi-users:oauth-state"
+STATE_SECRET = secrets.token_hex(32)
+STATE_LIFETIME = 3600
+CSRF_COOKIE = "oauth_csrf"
+
+USERS = {}
+SESSIONS = {}
+PROVIDER_USERS = {
+    "attacker": {"id": "sso-atk-7f3a", "email": "attacker@evil.test"},
+    "victim": {"id": "sso-vic-9c2e", "email": "victim@mail.test"},
+}
+PROVIDER_SESSIONS = {}
+CODES = {}
+
+PANEL = """<!doctype html>
+<html><head><meta charset="utf-8"><title>SSO Login Demo</title></head>
+<body>
+<h1>SSO Login Demo</h1>
+<form method="post" action="/register">
+<input name="username" placeholder="username">
+<input name="password" type="password" placeholder="password">
+<button type="submit">Register</button>
+</form>
+<form method="post" action="/login">
+<input name="username" placeholder="username">
+<input name="password" type="password" placeholder="password">
+<button type="submit">Login</button>
+</form>
+<p><a href="/oauth/authorize">Login with SSO</a></p>
+</body></html>"""
+
+
+def _b64e(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def _b64d(s):
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def make_state_token(csrf_token):
+    payload = {"aud": STATE_AUDIENCE, "exp": int(time.time()) + STATE_LIFETIME,
+               "csrftoken": csrf_token}
+    raw = _b64e(json.dumps(payload, separators=(",", ":")).encode())
+    sig = _b64e(hmac.new(STATE_SECRET.encode(), raw.encode(),
+                         hashlib.sha256).digest())
+    return raw + "." + sig
+
+
+def check_state_token(token):
+    try:
+        raw, sig = token.split(".")
+    except ValueError:
+        return None
+    good = _b64e(hmac.new(STATE_SECRET.encode(), raw.encode(),
+                          hashlib.sha256).digest())
+    if not hmac.compare_digest(good, sig):
+        return None
+    try:
+        payload = json.loads(_b64d(raw))
+    except Exception:
+        return None
+    if payload.get("aud") != STATE_AUDIENCE:
+        return None
+    if payload.get("exp", 0) < time.time():
+        return None
+    return payload
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "Lab36/1.0"
+
+    def _cookies(self):
+        out = {}
+        for part in self.headers.get("Cookie", "").split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, v = part.split("=", 1)
+                out[k.strip()] = v.strip()
+        return out
+
+    def _send(self, code, obj, cookies=None, location=None):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        for c in (cookies or []):
+            self.send_header("Set-Cookie", c)
+        if location:
+            self.send_header("Location", location)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_html(self, code, html):
+        body = html.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _redirect(self, location, cookies=None):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        for c in (cookies or []):
+            self.send_header("Set-Cookie", c)
+        self.end_headers()
+
+    def _form(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        raw = self.rfile.read(n) if n else b""
+        return {k: v[0] for k, v in parse_qs(raw.decode()).items()}
+
+    def _session_user(self):
+        return SESSIONS.get(self._cookies().get("session", ""))
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        parts = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(parts.query).items()}
+        if parts.path == "/":
+            self._send_html(200, PANEL)
+            return
+        if parts.path == "/me":
+            username = self._session_user()
+            if not username:
+                self._send(401, {"error": "unauthorized"})
+                return
+            u = USERS[username]
+            sso = u["oauth"]["email"] if u.get("oauth") else None
+            self._send(200, {"username": username, "email": u["email"], "sso": sso})
+            return
+        if parts.path == "/oauth/authorize":
+            csrf_token = secrets.token_urlsafe(32)
+            state = make_state_token(csrf_token)
+            base = "http://%s/oauth/callback" % self.headers.get("Host", "127.0.0.1:8080")
+            url = ("http://%s/provider/authorize?client_id=lab"
+                   "&redirect_uri=%s&response_type=code&state=%s"
+                   % (self.headers.get("Host", "127.0.0.1:8080"), base, state))
+            cookie = "%s=%s; Path=/; HttpOnly; SameSite=Lax" % (CSRF_COOKIE, csrf_token)
+            self._send(200, {"authorization_url": url}, [cookie])
+            return
+        if parts.path == "/provider/login":
+            who = q.get("as", "")
+            if who not in PROVIDER_USERS:
+                self._send(400, {"error": "unknown provider account"})
+                return
+            psid = "psess_" + secrets.token_hex(8)
+            PROVIDER_SESSIONS[psid] = who
+            self._send(200, {"ok": True, "provider": who},
+                       ["psession=%s; Path=/; HttpOnly" % psid])
+            return
+        if parts.path == "/provider/authorize":
+            who = PROVIDER_SESSIONS.get(self._cookies().get("psession", ""))
+            if not who:
+                self._send(401, {"error": "provider login required"})
+                return
+            redirect_uri = q.get("redirect_uri", "")
+            state = q.get("state", "")
+            code = "code_" + secrets.token_hex(8)
+            CODES[code] = PROVIDER_USERS[who]["id"]
+            self._redirect("%s?code=%s&state=%s" % (redirect_uri, code, state))
+            return
+        if parts.path == "/oauth/callback":
+            payload = check_state_token(q.get("state", ""))
+            if payload is None:
+                self._send(400, {"error": "invalid state"})
+                return
+            cookie_csrf = self._cookies().get(CSRF_COOKIE, "")
+            state_csrf = payload.get("csrftoken", "")
+            if (not cookie_csrf or not state_csrf
+                    or not hmac.compare_digest(cookie_csrf, state_csrf)):
+                self._send(400, {"error": "invalid state"})
+                return
+            code = q.get("code", "")
+            provider_id = CODES.pop(code, None)
+            if not provider_id:
+                self._send(400, {"error": "invalid code"})
+                return
+            email = next(p["email"] for p in PROVIDER_USERS.values()
+                         if p["id"] == provider_id)
+            username = self._session_user()
+            if username:
+                USERS[username]["oauth"] = {"id": provider_id, "email": email}
+                self._send(200, {"ok": True, "linked": email})
+                return
+            for name, u in USERS.items():
+                if (u.get("oauth") or {}).get("id") == provider_id:
+                    sid = "sess_" + secrets.token_hex(8)
+                    SESSIONS[sid] = name
+                    self._send(200, {"ok": True, "username": name},
+                               ["session=%s; Path=/; HttpOnly" % sid])
+                    return
+            new_user = email.split("@")[0]
+            USERS[new_user] = {"password": "", "email": email,
+                               "oauth": {"id": provider_id, "email": email}}
+            sid = "sess_" + secrets.token_hex(8)
+            SESSIONS[sid] = new_user
+            self._send(200, {"ok": True, "username": new_user},
+                       ["session=%s; Path=/; HttpOnly" % sid])
+            return
+        self._send(404, {"error": "not found"})
+
+    def do_POST(self):
+        parts = urlparse(self.path)
+        if parts.path == "/register":
+            form = self._form()
+            username = form.get("username", "").strip().lower()
+            password = form.get("password", "")
+            if not username or not password:
+                self._send(400, {"error": "username and password required"})
+                return
+            if username in USERS:
+                self._send(409, {"error": "username exists"})
+                return
+            USERS[username] = {"password": password,
+                               "email": username + "@lab.test", "oauth": None}
+            self._send(200, {"ok": True, "username": username})
+            return
+        if parts.path == "/login":
+            form = self._form()
+            username = form.get("username", "").strip().lower()
+            u = USERS.get(username)
+            if not u or u["password"] != form.get("password", ""):
+                self._send(401, {"error": "invalid credentials"})
+                return
+            sid = "sess_" + secrets.token_hex(8)
+            SESSIONS[sid] = username
+            self._send(200, {"ok": True, "token": sid},
+                       ["session=%s; Path=/; HttpOnly" % sid])
+            return
+        self._send(404, {"error": "not found"})
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
