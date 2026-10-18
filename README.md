@@ -78,6 +78,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 34 | [`web/34-confluence-setup-bfla`](labs/web/34-confluence-setup-bfla/) | BFLA | Web | Confluence BFLA setup re-run -> flip setupComplete -> buat admin baru -> ATO | CVE-2023-22515 (Atlassian, CVSS 10.0) |
 | 35 | [`web/35-opensourcepos-classic-csrf`](labs/web/35-opensourcepos-classic-csrf/) | CSRF | Web | OpenSourcePOS classic CSRF POST /users tanpa token -> rogue admin -> ATO | CVE-2025-68434 (GHSA-wjm4-hfwg-5w5r, CVSS 8.8) |
 | 36 | [`web/36-fastapiusers-login-csrf`](labs/web/36-fastapiusers-login-csrf/) | CSRF | Web | fastapi-users login CSRF: state token stateless -> SSO identity penyerang ter-link ke akun korban -> ATO | CVE-2025-68481 (GHSA-5j53-63w8-8625) |
+| 37 | [`web/37-argocd-samesite-csrf`](labs/web/37-argocd-samesite-csrf/) | CSRF | Web | Argo CD CSRF: SameSite=Lax batas site bukan origin + tanpa validasi content-type -> forged Application | CVE-2024-22424 (GHSA-92mw-q256-5vwg) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
