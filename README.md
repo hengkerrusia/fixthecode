@@ -81,6 +81,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 37 | [`web/37-argocd-samesite-csrf`](labs/web/37-argocd-samesite-csrf/) | CSRF | Web | Argo CD CSRF lintas-subdomain -> forged Application | Lax = batas site; tanpa validasi content-type | CVE-2024-22424 (GHSA-92mw-q256-5vwg) |
 | 38 | [`web/38-admidio-imported-csrf`](labs/web/38-admidio-imported-csrf/) | CSRF | Web | Admidio imported=1 → skip CSRF + validasi → tulis inventory | penegakan CSRF kondisional pada input penyerang | CVE-2026-34383 (GHSA-4rwm-c5mj-wh7x, CVSS 4.3) |
 | 39 | [`web/39-avideo-plugin-csrf`](labs/web/39-avideo-plugin-csrf/) | CSRF | Web | AVideo CSRF tempaan -> tulis config plugin -> takeover platform | token CSRF absen di endpoint konfigurasi plugin | CVE-2026-34394 (GHSA-4wwr-7h7c-chqr, CVSS 8.1) |
+| 40 | [`web/40-mailpit-cswsh`](labs/web/40-mailpit-cswsh/) | CSWSH | WebSocket handshake | CSWSH Mailpit -> socket korban dibajak -> email bocor | handshake WebSocket tanpa validasi Origin | CVE-2026-22689 (GHSA-524m-q5m7-79mm, CVSS 6.5) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
