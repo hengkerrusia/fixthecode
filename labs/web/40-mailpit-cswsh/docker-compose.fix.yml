@@ -1,0 +1,4 @@
+services:
+  app:
+    volumes:
+      - ./fix/app/app.py:/srv/app.py:ro
