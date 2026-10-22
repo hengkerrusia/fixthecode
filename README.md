@@ -83,6 +83,7 @@ Kategori top-level dibuat lebar dan stabil (`web`, `api`, `network`, `crypto`, `
 | 39 | [`web/39-avideo-plugin-csrf`](labs/web/39-avideo-plugin-csrf/) | CSRF | Web | AVideo CSRF tempaan -> tulis config plugin -> takeover platform | token CSRF absen di endpoint konfigurasi plugin | CVE-2026-34394 (GHSA-4wwr-7h7c-chqr, CVSS 8.1) |
 | 40 | [`web/40-mailpit-cswsh`](labs/web/40-mailpit-cswsh/) | CSWSH | WebSocket handshake | CSWSH Mailpit -> socket korban dibajak -> email bocor | handshake WebSocket tanpa validasi Origin | CVE-2026-22689 (GHSA-524m-q5m7-79mm, CVSS 6.5) |
 | 41 | [`web/41-mailpit-cswsh-bypass`](labs/web/41-mailpit-cswsh-bypass/) | CSWSH | URL path | CSWSH Mailpit -> cek Origin terlewati via path percent-encoded -> socket dibajak -> email bocor | gate Origin uji URI mentah, router path ter-decode | CVE-2026-67448 (GHSA-8r62-w5wh-fc5m) |
+| 42 | [`web/42-bokeh-cswsh-allowlist`](labs/web/42-bokeh-cswsh-allowlist/) | CSWSH | WebSocket handshake | CSWSH Bokeh -> allowlist Origin lolos via domain look-alike -> socket dibajak -> event bocor | pencocokan allowlist berhenti di awalan label | CVE-2026-21883 (GHSA-793v-589g-574v, CVSS 5.4) |
 
 Kolom **Kategori** adalah taksonomi seri serangan — dipakai sebagai acuan monitoring
 otomatis (vuln-watch) untuk mencari write-up/riset terbaru per kategori.
