@@ -265,6 +265,7 @@ def phase2():
         print("[SKIP] sisa fase 2 dilewati — fix masih identik dengan app rentan")
         return
     compose(PHASE2_COMPOSE, "down", "-v", check_rc=False)
+    compose(PHASE1_COMPOSE, "down", "-v", check_rc=False)
     compose(PHASE2_COMPOSE, "up", "-d", "--build")
     if not check("app start (mode fix)", wait_ready()):
         return
