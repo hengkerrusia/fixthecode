@@ -1,0 +1,11 @@
+# Definisi PRISTINE (rentan) — jangan diedit untuk fixing.
+# Fixing dikerjakan di fix/ dan diuji via docker-compose.fix.yml.
+services:
+  app:
+    build: ./app
+    ports:
+      - "8080:8080"
+  browser:
+    build: ./browser
+    ports:
+      - "8081:8081"
